@@ -1,0 +1,8 @@
+name = "ito-devtracker"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "public"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ito-permits"
+database_id = "8e6b137b-d86d-4d16-bb56-dd415c8bc70a"

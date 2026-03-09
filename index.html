@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ito Development Tracker - Three Forks, MT</title>
+  
+  <!-- Mapbox GL JS -->
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.js"></script>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.css" rel="stylesheet" />
+  
+  <!-- React -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
+    .mapboxgl-popup-content { padding: 0 !important; border-radius: 8px; overflow: hidden; }
+    .mapboxgl-popup-close-button { font-size: 18px; padding: 4px 8px; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // ========================================================================
+    // CONFIGURATION - Replace with your Mapbox token
+    // ========================================================================
+    const CONFIG = {
+      mapboxToken: 'pk.eyJ1IjoiaXRvZ2VvIiwiYSI6ImNtNnphb29uMDA2dTYycm9mNTNvNjdvNjQifQ.l0eaBrNbQV7B4VNiyPKd0A',
+      cityName: 'Three Forks',
+      cityState: 'MT',
+      mapCenter: [-111.5513, 45.8930],
+      mapZoom: 14,
+      mapBounds: [[-111.58, 45.87], [-111.52, 45.92]],
+    };
+
+    // ========================================================================
+    // SAMPLE DATA - This would come from your database in production
+    // ========================================================================
+    const SAMPLE_PARCELS = {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { 
+            parcel_id: '06-0450-12-1-01-01-0000', 
+            address: '123 Main St',
+            owner: 'John Smith',
+            acres: 0.25,
+            zoning: 'R-1',
+            assessed_value: 185000
+          },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[
+              [-111.5525, 45.8935],
+              [-111.5515, 45.8935],
+              [-111.5515, 45.8925],
+              [-111.5525, 45.8925],
+              [-111.5525, 45.8935]
+            ]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { 
+            parcel_id: '06-0450-08-2-03-04-0000', 
+            address: '456 River Rd',
+            owner: 'Jane Doe',
+            acres: 0.5,
+            zoning: 'FP-1',
+            assessed_value: 220000
+          },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[
+              [-111.5545, 45.8920],
+              [-111.5530, 45.8920],
+              [-111.5530, 45.8905],
+              [-111.5545, 45.8905],
+              [-111.5545, 45.8920]
+            ]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { 
+            parcel_id: '06-0450-15-3-02-08-0000', 
+            address: '789 Broadway',
+            owner: 'Downtown LLC',
+            acres: 0.15,
+            zoning: 'C-1',
+            assessed_value: 320000
+          },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[
+              [-111.5500, 45.8940],
+              [-111.5490, 45.8940],
+              [-111.5490, 45.8932],
+              [-111.5500, 45.8932],
+              [-111.5500, 45.8940]
+            ]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { 
+            parcel_id: '06-0450-11-1-05-02-0000', 
+            address: '321 Oak Ave',
+            owner: 'Mike Johnson',
+            acres: 0.35,
+            zoning: 'R-2',
+            assessed_value: 195000
+          },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[
+              [-111.5480, 45.8915],
+              [-111.5465, 45.8915],
+              [-111.5465, 45.8900],
+              [-111.5480, 45.8900],
+              [-111.5480, 45.8915]
+            ]]
+          }
+        },
+        {
+          type: 'Feature',
+          properties: { 
+            parcel_id: '06-0450-22-4-00-00-0000', 
+            address: 'Wheat Fields Subdivision',
+            owner: 'Valley Developers',
+            acres: 15.2,
+            zoning: 'R-1',
+            assessed_value: 450000
+          },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[
+              [-111.5600, 45.8880],
+              [-111.5550, 45.8880],
+              [-111.5550, 45.8850],
+              [-111.5600, 45.8850],
+              [-111.5600, 45.8880]
+            ]]
+          }
+        }
+      ]
+    };
+
+    const SAMPLE_PERMITS = [
+      { 
+        id: 'ZP-2026-001', 
+        type: 'Zoning Permit', 
+        typeCode: 'ZP',
+        address: '123 Main St', 
+        parcel_id: '06-0450-12-1-01-01-0000', 
+        applicant: 'John Smith', 
+        status: 'approved', 
+        submitted: '2026-01-15', 
+        reviewed: '2026-01-18', 
+        description: 'New garage construction - 24x30 detached garage',
+        zone: 'R-1',
+        valuation: 45000,
+        coords: [-111.5520, 45.8930]
+      },
+      { 
+        id: 'FP-2026-003', 
+        type: 'Flood Permit', 
+        typeCode: 'FP',
+        address: '456 River Rd', 
+        parcel_id: '06-0450-08-2-03-04-0000', 
+        applicant: 'Jane Doe', 
+        status: 'pending', 
+        submitted: '2026-02-20', 
+        reviewed: null, 
+        description: 'Deck addition in floodplain - 12x20 treated lumber deck',
+        zone: 'FP-1',
+        valuation: 8500,
+        coords: [-111.5537, 45.8912]
+      },
+      { 
+        id: 'SP-2026-002', 
+        type: 'Sign Permit', 
+        typeCode: 'SP',
+        address: '789 Broadway', 
+        parcel_id: '06-0450-15-3-02-08-0000', 
+        applicant: 'Downtown LLC', 
+        status: 'under_review', 
+        submitted: '2026-02-18', 
+        reviewed: null, 
+        description: 'New business signage - 24 sq ft illuminated sign',
+        zone: 'C-1',
+        valuation: 3200,
+        coords: [-111.5495, 45.8936]
+      },
+      { 
+        id: 'ZP-2026-004', 
+        type: 'Zoning Permit', 
+        typeCode: 'ZP',
+        address: '321 Oak Ave', 
+        parcel_id: '06-0450-11-1-05-02-0000', 
+        applicant: 'Mike Johnson', 
+        status: 'approved', 
+        submitted: '2026-02-01', 
+        reviewed: '2026-02-05', 
+        description: 'ADU construction - 600 sq ft accessory dwelling unit',
+        zone: 'R-2',
+        valuation: 125000,
+        coords: [-111.5472, 45.8907]
+      },
+      { 
+        id: 'SUB-2026-001', 
+        type: 'Subdivision', 
+        typeCode: 'SUB',
+        address: 'Wheat Fields Subdivision', 
+        parcel_id: '06-0450-22-4-00-00-0000', 
+        applicant: 'Valley Developers', 
+        status: 'under_review', 
+        submitted: '2026-02-10', 
+        reviewed: null, 
+        description: '12-lot minor subdivision with infrastructure',
+        zone: 'R-1',
+        valuation: 1200000,
+        coords: [-111.5575, 45.8865]
+      },
+      { 
+        id: 'ZP-2026-005', 
+        type: 'Zoning Permit', 
+        typeCode: 'ZP',
+        address: '555 Elm St', 
+        parcel_id: '06-0450-09-2-01-03-0000', 
+        applicant: 'Sarah Wilson', 
+        status: 'denied', 
+        submitted: '2026-01-25', 
+        reviewed: '2026-01-30', 
+        description: 'Setback variance request - proposed 3ft side setback',
+        zone: 'R-1',
+        valuation: 0,
+        denial_reason: 'Does not meet minimum 5ft setback requirement per city code 12.3.4',
+        coords: [-111.5510, 45.8895]
+      },
+    ];
+
+    const ZONING_COLORS = {
+      'R-1': '#4ade80',
+      'R-2': '#22c55e',
+      'C-1': '#3b82f6',
+      'C-2': '#1d4ed8',
+      'FP-1': '#06b6d4',
+      'I-1': '#a855f7',
+      'AG': '#84cc16'
+    };
+
+    const STATUS_CONFIG = {
+      pending: { bg: 'bg-yellow-100', text: 'text-yellow-800', color: '#eab308', label: 'PENDING' },
+      under_review: { bg: 'bg-blue-100', text: 'text-blue-800', color: '#3b82f6', label: 'UNDER REVIEW' },
+      approved: { bg: 'bg-green-100', text: 'text-green-800', color: '#22c55e', label: 'APPROVED' },
+      denied: { bg: 'bg-red-100', text: 'text-red-800', color: '#ef4444', label: 'DENIED' },
+    };
+
+    // ========================================================================
+    // COMPONENTS
+    // ========================================================================
+
+    // Icon components using Lucide
+    const Icon = ({ name, size = 20, className = '' }) => {
+      const ref = useRef(null);
+      useEffect(() => {
+        if (ref.current) {
+          ref.current.innerHTML = '';
+          const icon = lucide.icons[name];
+          if (icon) {
+            const svg = icon.toSvg({ width: size, height: size });
+            ref.current.innerHTML = svg;
+          }
+        }
+      }, [name, size]);
+      return <span ref={ref} className={`inline-flex ${className}`} />;
+    };
+
+    // Status Badge
+    const StatusBadge = ({ status }) => {
+      const config = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
+      return (
+        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
+          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: config.color }} />
+          {config.label}
+        </span>
+      );
+    };
+
+    // ========================================================================
+    // MAP COMPONENT - The core Mapbox integration
+    // ========================================================================
+    const PermitMap = ({ permits, parcels, selectedPermit, onPermitClick, onParcelClick, className = 'h-full' }) => {
+      const mapContainer = useRef(null);
+      const map = useRef(null);
+      const [loaded, setLoaded] = useState(false);
+
+      useEffect(() => {
+        if (map.current) return;
+
+        mapboxgl.accessToken = CONFIG.mapboxToken;
+        
+        map.current = new mapboxgl.Map({
+          container: mapContainer.current,
+          style: 'mapbox://styles/mapbox/streets-v12',
+          center: CONFIG.mapCenter,
+          zoom: CONFIG.mapZoom,
+        });
+
+        map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+        map.current.addControl(new mapboxgl.ScaleControl(), 'bottom-left');
+
+        map.current.on('load', () => {
+          // Add parcels layer
+          map.current.addSource('parcels', {
+            type: 'geojson',
+            data: parcels
+          });
+
+          // Parcel fills colored by zoning
+          map.current.addLayer({
+            id: 'parcels-fill',
+            type: 'fill',
+            source: 'parcels',
+            paint: {
+              'fill-color': [
+                'match',
+                ['get', 'zoning'],
+                'R-1', ZONING_COLORS['R-1'],
+                'R-2', ZONING_COLORS['R-2'],
+                'C-1', ZONING_COLORS['C-1'],
+                'C-2', ZONING_COLORS['C-2'],
+                'FP-1', ZONING_COLORS['FP-1'],
+                'I-1', ZONING_COLORS['I-1'],
+                'AG', ZONING_COLORS['AG'],
+                '#9ca3af'
+              ],
+              'fill-opacity': 0.3
+            }
+          });
+
+          // Parcel outlines
+          map.current.addLayer({
+            id: 'parcels-line',
+            type: 'line',
+            source: 'parcels',
+            paint: {
+              'line-color': '#374151',
+              'line-width': 1
+            }
+          });
+
+          // Add permits as points
+          map.current.addSource('permits', {
+            type: 'geojson',
+            data: {
+              type: 'FeatureCollection',
+              features: permits.map(p => ({
+                type: 'Feature',
+                properties: { ...p },
+                geometry: { type: 'Point', coordinates: p.coords }
+              }))
+            }
+          });
+
+          // Permit markers
+          map.current.addLayer({
+            id: 'permits-markers',
+            type: 'circle',
+            source: 'permits',
+            paint: {
+              'circle-radius': 10,
+              'circle-color': [
+                'match',
+                ['get', 'status'],
+                'pending', STATUS_CONFIG.pending.color,
+                'under_review', STATUS_CONFIG.under_review.color,
+                'approved', STATUS_CONFIG.approved.color,
+                'denied', STATUS_CONFIG.denied.color,
+                '#6b7280'
+              ],
+              'circle-stroke-width': 3,
+              'circle-stroke-color': '#ffffff'
+            }
+          });
+
+          // Permit labels
+          map.current.addLayer({
+            id: 'permits-labels',
+            type: 'symbol',
+            source: 'permits',
+            layout: {
+              'text-field': ['get', 'typeCode'],
+              'text-size': 9,
+              'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold']
+            },
+            paint: {
+              'text-color': '#ffffff'
+            }
+          });
+
+          // Click handlers
+          map.current.on('click', 'permits-markers', (e) => {
+            const props = e.features[0].properties;
+            // Parse stringified nested objects
+            Object.keys(props).forEach(key => {
+              try { props[key] = JSON.parse(props[key]); } catch {}
+            });
+            onPermitClick && onPermitClick(props);
+          });
+
+          map.current.on('click', 'parcels-fill', (e) => {
+            if (e.features.length > 0) {
+              onParcelClick && onParcelClick(e.features[0].properties);
+            }
+          });
+
+          // Cursor changes
+          map.current.on('mouseenter', 'permits-markers', () => {
+            map.current.getCanvas().style.cursor = 'pointer';
+          });
+          map.current.on('mouseleave', 'permits-markers', () => {
+            map.current.getCanvas().style.cursor = '';
+          });
+          map.current.on('mouseenter', 'parcels-fill', () => {
+            map.current.getCanvas().style.cursor = 'pointer';
+          });
+          map.current.on('mouseleave', 'parcels-fill', () => {
+            map.current.getCanvas().style.cursor = '';
+          });
+
+          setLoaded(true);
+        });
+
+        return () => {
+          if (map.current) {
+            map.current.remove();
+            map.current = null;
+          }
+        };
+      }, []);
+
+      // Fly to selected permit
+      useEffect(() => {
+        if (loaded && map.current && selectedPermit) {
+          map.current.flyTo({
+            center: selectedPermit.coords,
+            zoom: 17,
+            duration: 1000
+          });
+        }
+      }, [loaded, selectedPermit]);
+
+      return (
+        <div className={`relative ${className}`}>
+          <div ref={mapContainer} className="absolute inset-0" />
+          
+          {/* Legend */}
+          <div className="absolute bottom-8 left-4 bg-white rounded-lg shadow-lg p-3 text-xs max-w-xs">
+            <p className="font-semibold text-gray-700 mb-2">Permit Status</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 mb-3">
+              {Object.entries(STATUS_CONFIG).map(([key, val]) => (
+                <div key={key} className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full border-2 border-white shadow" style={{ backgroundColor: val.color }} />
+                  <span className="text-gray-600">{val.label}</span>
+                </div>
+              ))}
+            </div>
+            <p className="font-semibold text-gray-700 mb-2 pt-2 border-t">Zoning</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+              {Object.entries(ZONING_COLORS).slice(0, 6).map(([zone, color]) => (
+                <div key={zone} className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded" style={{ backgroundColor: color, opacity: 0.5 }} />
+                  <span className="text-gray-600">{zone}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ========================================================================
+    // PUBLIC PORTAL
+    // ========================================================================
+    const PublicPortal = ({ onSwitchView }) => {
+      const [searchQuery, setSearchQuery] = useState('');
+      const [selectedPermit, setSelectedPermit] = useState(null);
+      const [selectedParcel, setSelectedParcel] = useState(null);
+      const [view, setView] = useState('list'); // 'list' or 'map'
+
+      const filteredPermits = SAMPLE_PERMITS.filter(p => 
+        p.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.applicant.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+
+      const stats = {
+        total: SAMPLE_PERMITS.length,
+        pending: SAMPLE_PERMITS.filter(p => p.status === 'pending').length,
+        underReview: SAMPLE_PERMITS.filter(p => p.status === 'under_review').length,
+        approved: SAMPLE_PERMITS.filter(p => p.status === 'approved').length,
+      };
+
+      return (
+        <div className="min-h-screen bg-gray-50 flex flex-col">
+          {/* Header */}
+          <header className="bg-green-700 text-white">
+            <div className="max-w-7xl mx-auto px-4 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
+                    <Icon name="map-pin" size={24} className="text-green-700" />
+                  </div>
+                  <div>
+                    <h1 className="text-xl font-bold">{CONFIG.cityName} Development Tracker</h1>
+                    <p className="text-green-200 text-sm">Powered by Ito Geospatial</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={onSwitchView}
+                  className="text-sm bg-green-600 hover:bg-green-500 px-4 py-2 rounded-lg flex items-center gap-2"
+                >
+                  <Icon name="lock" size={16} />
+                  Staff Login
+                </button>
+              </div>
+            </div>
+          </header>
+
+          {/* Search Bar */}
+          <div className="bg-green-600 text-white py-8">
+            <div className="max-w-4xl mx-auto px-4 text-center">
+              <h2 className="text-2xl font-bold mb-2">What's Being Built in {CONFIG.cityName}?</h2>
+              <p className="text-green-100 mb-4">Search permits by address, permit number, or applicant</p>
+              
+              <div className="relative max-w-xl mx-auto">
+                <Icon name="search" size={20} className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search permits... (try '123 Main' or 'Smith')"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 rounded-lg text-gray-900 text-lg focus:ring-2 focus:ring-green-300 outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="bg-white border-b">
+            <div className="max-w-7xl mx-auto px-4 py-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
+                  <div className="text-sm text-gray-500">Active Permits</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
+                  <div className="text-sm text-gray-500">Pending Review</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">{stats.underReview}</div>
+                  <div className="text-sm text-gray-500">Under Review</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">{stats.approved}</div>
+                  <div className="text-sm text-gray-500">Approved</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* View Toggle */}
+          <div className="max-w-7xl mx-auto px-4 py-4 w-full">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setView('list')}
+                  className={`px-4 py-2 rounded-lg flex items-center gap-2 ${view === 'list' ? 'bg-green-600 text-white' : 'bg-white border text-gray-700'}`}
+                >
+                  <Icon name="list" size={18} />
+                  List View
+                </button>
+                <button
+                  onClick={() => setView('map')}
+                  className={`px-4 py-2 rounded-lg flex items-center gap-2 ${view === 'map' ? 'bg-green-600 text-white' : 'bg-white border text-gray-700'}`}
+                >
+                  <Icon name="map" size={18} />
+                  Map View
+                </button>
+              </div>
+              <span className="text-sm text-gray-500">{filteredPermits.length} permits</span>
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <main className="flex-1 max-w-7xl mx-auto px-4 pb-8 w-full">
+            {view === 'map' ? (
+              <div className="bg-white rounded-lg shadow-sm border overflow-hidden" style={{ height: '600px' }}>
+                <PermitMap 
+                  permits={filteredPermits}
+                  parcels={SAMPLE_PARCELS}
+                  selectedPermit={selectedPermit}
+                  onPermitClick={(p) => setSelectedPermit(p)}
+                  onParcelClick={(p) => setSelectedParcel(p)}
+                />
+              </div>
+            ) : (
+              <div className="grid md:grid-cols-3 gap-6">
+                {/* Permit List */}
+                <div className="md:col-span-2">
+                  <div className="bg-white rounded-lg shadow-sm border">
+                    <div className="divide-y">
+                      {filteredPermits.map((permit) => (
+                        <div 
+                          key={permit.id}
+                          onClick={() => setSelectedPermit(permit)}
+                          className={`p-4 hover:bg-gray-50 cursor-pointer transition ${selectedPermit?.id === permit.id ? 'bg-green-50 border-l-4 border-green-500' : ''}`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-gray-900">{permit.id}</span>
+                                <StatusBadge status={permit.status} />
+                              </div>
+                              <div className="text-sm text-gray-600 mt-1">{permit.address}</div>
+                              <div className="text-sm text-gray-500">{permit.type} • {permit.applicant}</div>
+                            </div>
+                            <Icon name="chevron-right" size={20} className="text-gray-400" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Detail Panel */}
+                <div>
+                  {selectedPermit ? (
+                    <div className="bg-white rounded-lg shadow-sm border sticky top-4">
+                      <div className="p-4 border-b bg-gray-50">
+                        <h3 className="font-semibold text-gray-900">Permit Details</h3>
+                      </div>
+                      <div className="p-4">
+                        {/* Mini Map */}
+                        <div className="h-32 bg-gray-100 rounded-lg mb-4 overflow-hidden">
+                          <PermitMap 
+                            permits={[selectedPermit]}
+                            parcels={SAMPLE_PARCELS}
+                            selectedPermit={selectedPermit}
+                            className="h-full"
+                          />
+                        </div>
+                        
+                        <div className="space-y-3">
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Permit Number</div>
+                            <div className="font-medium">{selectedPermit.id}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Address</div>
+                            <div className="font-medium">{selectedPermit.address}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Parcel ID</div>
+                            <div className="font-mono text-sm">{selectedPermit.parcel_id}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Zone</div>
+                            <div className="font-medium">{selectedPermit.zone}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Description</div>
+                            <div className="text-sm">{selectedPermit.description}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Project Value</div>
+                            <div className="font-medium">${selectedPermit.valuation?.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Status</div>
+                            <StatusBadge status={selectedPermit.status} />
+                          </div>
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase">Submitted</div>
+                            <div className="text-sm">{selectedPermit.submitted}</div>
+                          </div>
+                          {selectedPermit.reviewed && (
+                            <div>
+                              <div className="text-xs text-gray-500 uppercase">Decision Date</div>
+                              <div className="text-sm">{selectedPermit.reviewed}</div>
+                            </div>
+                          )}
+                          {selectedPermit.denial_reason && (
+                            <div className="bg-red-50 p-3 rounded-lg">
+                              <div className="text-xs text-red-600 uppercase font-medium">Denial Reason</div>
+                              <div className="text-sm text-red-700">{selectedPermit.denial_reason}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-lg shadow-sm border p-8 text-center">
+                      <Icon name="file-text" size={40} className="mx-auto text-gray-300 mb-2" />
+                      <p className="text-gray-500">Select a permit to view details</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </main>
+
+          {/* Footer */}
+          <footer className="bg-gray-100 border-t py-6">
+            <div className="max-w-7xl mx-auto px-4 text-center text-sm text-gray-500">
+              <p>Town of {CONFIG.cityName}, {CONFIG.cityState} • Development Tracking System</p>
+              <p className="mt-1">Powered by <span className="text-green-600 font-medium">Ito Geospatial</span> • $300/month</p>
+            </div>
+          </footer>
+        </div>
+      );
+    };
+
+    // ========================================================================
+    // STAFF DASHBOARD
+    // ========================================================================
+    const StaffDashboard = ({ onSwitchView }) => {
+      const [activeTab, setActiveTab] = useState('dashboard');
+      const [selectedPermit, setSelectedPermit] = useState(null);
+      const [showNewPermit, setShowNewPermit] = useState(false);
+
+      const pendingCount = SAMPLE_PERMITS.filter(p => p.status === 'pending' || p.status === 'under_review').length;
+
+      const tabs = [
+        { id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' },
+        { id: 'permits', label: 'Permits', icon: 'file-text', badge: pendingCount },
+        { id: 'map', label: 'Map View', icon: 'map' },
+        { id: 'reports', label: 'Reports', icon: 'bar-chart-3' },
+      ];
+
+      return (
+        <div className="min-h-screen bg-gray-100 flex">
+          {/* Sidebar */}
+          <aside className="w-64 bg-gray-900 text-white flex flex-col">
+            <div className="p-4 border-b border-gray-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
+                  <Icon name="map-pin" size={24} />
+                </div>
+                <div>
+                  <h1 className="font-bold">Ito Permits</h1>
+                  <p className="text-xs text-gray-400">{CONFIG.cityName}, {CONFIG.cityState}</p>
+                </div>
+              </div>
+            </div>
+
+            <nav className="flex-1 p-4">
+              <ul className="space-y-1">
+                {tabs.map((tab) => (
+                  <li key={tab.id}>
+                    <button
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${
+                        activeTab === tab.id 
+                          ? 'bg-green-600 text-white' 
+                          : 'text-gray-300 hover:bg-gray-800'
+                      }`}
+                    >
+                      <Icon name={tab.icon} size={20} />
+                      <span>{tab.label}</span>
+                      {tab.badge && (
+                        <span className="ml-auto bg-yellow-500 text-gray-900 text-xs font-bold px-2 py-0.5 rounded-full">
+                          {tab.badge}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+
+            <div className="p-4 border-t border-gray-800 space-y-2">
+              <button 
+                onClick={onSwitchView}
+                className="w-full text-left text-sm text-gray-400 hover:text-white flex items-center gap-2 px-3 py-2"
+              >
+                <Icon name="eye" size={16} />
+                View Public Portal
+              </button>
+              <button 
+                className="w-full text-left text-sm text-gray-400 hover:text-white flex items-center gap-2 px-3 py-2"
+              >
+                <Icon name="log-out" size={16} />
+                Sign Out
+              </button>
+            </div>
+          </aside>
+
+          {/* Main Content */}
+          <main className="flex-1 flex flex-col">
+            {/* Top Bar */}
+            <header className="bg-white border-b px-6 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  {tabs.find(t => t.id === activeTab)?.label}
+                </h2>
+                <p className="text-sm text-gray-500">Wednesday, February 25, 2026</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <button className="relative p-2 text-gray-500 hover:text-gray-700">
+                  <Icon name="bell" size={20} />
+                  <span className="absolute top-0 right-0 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">3</span>
+                </button>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                    CT
+                  </div>
+                  <span className="text-sm text-gray-700">Crystal Turner</span>
+                </div>
+              </div>
+            </header>
+
+            {/* Content Area */}
+            <div className="flex-1 p-6 overflow-auto">
+              {activeTab === 'dashboard' && (
+                <div className="space-y-6">
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="bg-white rounded-lg p-4 shadow-sm border">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-sm text-gray-500">Pending Review</div>
+                          <div className="text-2xl font-bold text-yellow-600">
+                            {SAMPLE_PERMITS.filter(p => p.status === 'pending').length}
+                          </div>
+                        </div>
+                        <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                          <Icon name="clock" size={24} className="text-yellow-600" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-lg p-4 shadow-sm border">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-sm text-gray-500">Under Review</div>
+                          <div className="text-2xl font-bold text-blue-600">
+                            {SAMPLE_PERMITS.filter(p => p.status === 'under_review').length}
+                          </div>
+                        </div>
+                        <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                          <Icon name="eye" size={24} className="text-blue-600" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-lg p-4 shadow-sm border">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-sm text-gray-500">Approved (Feb)</div>
+                          <div className="text-2xl font-bold text-green-600">
+                            {SAMPLE_PERMITS.filter(p => p.status === 'approved').length}
+                          </div>
+                        </div>
+                        <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                          <Icon name="check-circle" size={24} className="text-green-600" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-lg p-4 shadow-sm border">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-sm text-gray-500">Total Value</div>
+                          <div className="text-2xl font-bold text-gray-900">
+                            ${(SAMPLE_PERMITS.reduce((sum, p) => sum + (p.valuation || 0), 0) / 1000000).toFixed(1)}M
+                          </div>
+                        </div>
+                        <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                          <Icon name="dollar-sign" size={24} className="text-gray-600" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Items */}
+                  <div className="bg-white rounded-lg shadow-sm border">
+                    <div className="p-4 border-b flex items-center justify-between">
+                      <h3 className="font-semibold">Action Required</h3>
+                      <button 
+                        onClick={() => setShowNewPermit(true)}
+                        className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-green-700"
+                      >
+                        <Icon name="plus" size={16} />
+                        New Permit
+                      </button>
+                    </div>
+                    <div className="divide-y">
+                      {SAMPLE_PERMITS.filter(p => p.status === 'pending' || p.status === 'under_review').map((permit) => (
+                        <div key={permit.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-2 h-2 rounded-full ${permit.status === 'pending' ? 'bg-yellow-500' : 'bg-blue-500'}`} />
+                            <div>
+                              <div className="font-medium">{permit.id} - {permit.type}</div>
+                              <div className="text-sm text-gray-500">{permit.address} • {permit.applicant}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <span className="text-sm text-gray-500">Submitted {permit.submitted}</span>
+                            <button className="text-green-600 hover:text-green-700 text-sm font-medium flex items-center gap-1">
+                              Review <Icon name="arrow-right" size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Quick Map Preview */}
+                  <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+                    <div className="p-4 border-b">
+                      <h3 className="font-semibold">Active Permits Map</h3>
+                    </div>
+                    <div style={{ height: '300px' }}>
+                      <PermitMap 
+                        permits={SAMPLE_PERMITS}
+                        parcels={SAMPLE_PARCELS}
+                        onPermitClick={(p) => setSelectedPermit(p)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'permits' && (
+                <div className="bg-white rounded-lg shadow-sm border">
+                  <div className="p-4 border-b flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="relative">
+                        <Icon name="search" size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                        <input 
+                          type="text" 
+                          placeholder="Search permits..." 
+                          className="pl-9 pr-4 py-2 border rounded-lg text-sm w-64 focus:ring-2 focus:ring-green-500 outline-none"
+                        />
+                      </div>
+                      <button className="flex items-center gap-1 text-gray-600 text-sm border px-3 py-2 rounded-lg hover:bg-gray-50">
+                        <Icon name="filter" size={16} />
+                        Filter
+                      </button>
+                    </div>
+                    <button 
+                      onClick={() => setShowNewPermit(true)}
+                      className="flex items-center gap-1 bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700"
+                    >
+                      <Icon name="plus" size={16} />
+                      New Permit
+                    </button>
+                  </div>
+                  <table className="w-full">
+                    <thead className="bg-gray-50 text-left text-sm text-gray-500">
+                      <tr>
+                        <th className="px-4 py-3 font-medium">Permit #</th>
+                        <th className="px-4 py-3 font-medium">Type</th>
+                        <th className="px-4 py-3 font-medium">Address</th>
+                        <th className="px-4 py-3 font-medium">Applicant</th>
+                        <th className="px-4 py-3 font-medium">Submitted</th>
+                        <th className="px-4 py-3 font-medium">Status</th>
+                        <th className="px-4 py-3 font-medium"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {SAMPLE_PERMITS.map((permit) => (
+                        <tr key={permit.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium text-green-600">{permit.id}</td>
+                          <td className="px-4 py-3 text-sm">{permit.type}</td>
+                          <td className="px-4 py-3 text-sm">{permit.address}</td>
+                          <td className="px-4 py-3 text-sm">{permit.applicant}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500">{permit.submitted}</td>
+                          <td className="px-4 py-3"><StatusBadge status={permit.status} /></td>
+                          <td className="px-4 py-3">
+                            <button className="text-gray-400 hover:text-gray-600">
+                              <Icon name="chevron-right" size={20} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {activeTab === 'map' && (
+                <div className="bg-white rounded-lg shadow-sm border overflow-hidden" style={{ height: 'calc(100vh - 180px)' }}>
+                  <PermitMap 
+                    permits={SAMPLE_PERMITS}
+                    parcels={SAMPLE_PARCELS}
+                    selectedPermit={selectedPermit}
+                    onPermitClick={(p) => setSelectedPermit(p)}
+                    onParcelClick={(p) => console.log('Parcel clicked:', p)}
+                  />
+                </div>
+              )}
+
+              {activeTab === 'reports' && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-white rounded-lg shadow-sm border p-6 hover:shadow-md transition cursor-pointer">
+                      <Icon name="bar-chart-3" size={32} className="text-green-600 mb-3" />
+                      <h3 className="font-semibold mb-1">Monthly Summary</h3>
+                      <p className="text-sm text-gray-500">Permit counts by type and status</p>
+                    </div>
+                    <div className="bg-white rounded-lg shadow-sm border p-6 hover:shadow-md transition cursor-pointer">
+                      <Icon name="calendar" size={32} className="text-blue-600 mb-3" />
+                      <h3 className="font-semibold mb-1">Processing Times</h3>
+                      <p className="text-sm text-gray-500">Average days from submit to decision</p>
+                    </div>
+                    <div className="bg-white rounded-lg shadow-sm border p-6 hover:shadow-md transition cursor-pointer">
+                      <Icon name="download" size={32} className="text-purple-600 mb-3" />
+                      <h3 className="font-semibold mb-1">Export Data</h3>
+                      <p className="text-sm text-gray-500">Download permits as CSV or PDF</p>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-white rounded-lg shadow-sm border">
+                    <div className="p-4 border-b">
+                      <h3 className="font-semibold">2026 Permit Activity</h3>
+                    </div>
+                    <div className="p-6">
+                      <div className="space-y-4">
+                        {[
+                          { type: 'Zoning', count: 3, color: 'bg-green-500' },
+                          { type: 'Flood', count: 1, color: 'bg-blue-500' },
+                          { type: 'Sign', count: 1, color: 'bg-purple-500' },
+                          { type: 'Subdivision', count: 1, color: 'bg-orange-500' },
+                        ].map((item) => (
+                          <div key={item.type} className="flex items-center gap-4">
+                            <div className="w-24 text-sm text-gray-500">{item.type}</div>
+                            <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+                              <div className={`${item.color} h-full`} style={{ width: `${(item.count / 6) * 100}%` }} />
+                            </div>
+                            <div className="w-12 text-sm font-medium">{item.count}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Council Ready Stats */}
+                  <div className="bg-green-50 rounded-lg border border-green-200 p-6">
+                    <h3 className="font-semibold text-green-800 mb-4 flex items-center gap-2">
+                      <Icon name="check-circle" size={20} className="text-green-600" />
+                      Council Meeting Ready
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                      <div className="bg-white rounded-lg p-3">
+                        <div className="text-2xl font-bold text-gray-900">$1.38M</div>
+                        <div className="text-xs text-gray-500">Total Project Value</div>
+                      </div>
+                      <div className="bg-white rounded-lg p-3">
+                        <div className="text-2xl font-bold text-gray-900">3.2</div>
+                        <div className="text-xs text-gray-500">Avg Days to Review</div>
+                      </div>
+                      <div className="bg-white rounded-lg p-3">
+                        <div className="text-2xl font-bold text-gray-900">83%</div>
+                        <div className="text-xs text-gray-500">Approval Rate</div>
+                      </div>
+                      <div className="bg-white rounded-lg p-3">
+                        <div className="text-2xl font-bold text-gray-900">12</div>
+                        <div className="text-xs text-gray-500">New Housing Units</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </main>
+
+          {/* New Permit Modal */}
+          {showNewPermit && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-auto">
+                <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-white">
+                  <h3 className="font-semibold text-lg">New Permit Application</h3>
+                  <button onClick={() => setShowNewPermit(false)} className="text-gray-400 hover:text-gray-600">
+                    <Icon name="x" size={20} />
+                  </button>
+                </div>
+                <div className="p-4 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Permit Type</label>
+                    <select className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none">
+                      <option>Zoning Permit ($50)</option>
+                      <option>Flood Permit ($75)</option>
+                      <option>Sign Permit ($35)</option>
+                      <option>Subdivision ($500)</option>
+                      <option>Site Plan Review ($150)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Property Address</label>
+                    <input type="text" placeholder="Enter address..." className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Parcel ID</label>
+                    <input type="text" placeholder="06-0450-XX-X-XX-XX-0000" className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none font-mono" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Applicant Name</label>
+                      <input type="text" placeholder="Property owner" className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                      <input type="tel" placeholder="(406) 555-0123" className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Project Value</label>
+                    <input type="text" placeholder="$0" className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <textarea placeholder="Describe the proposed work..." rows={3} className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none" />
+                  </div>
+                </div>
+                <div className="p-4 border-t bg-gray-50 flex justify-end gap-2">
+                  <button 
+                    onClick={() => setShowNewPermit(false)}
+                    className="px-4 py-2 border rounded-lg text-gray-700 hover:bg-gray-100"
+                  >
+                    Cancel
+                  </button>
+                  <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                    Create Permit
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    // ========================================================================
+    // MAIN APP
+    // ========================================================================
+    const App = () => {
+      const [view, setView] = useState('public');
+
+      return view === 'public' 
+        ? <PublicPortal onSwitchView={() => setView('staff')} />
+        : <StaffDashboard onSwitchView={() => setView('public')} />;
+    };
+
+    // Render
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

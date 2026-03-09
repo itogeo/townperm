@@ -1,0 +1,13 @@
+{
+  "name": "ito-devtracker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npx wrangler pages dev public/ --d1 DB=ito-permits",
+    "deploy": "npx wrangler pages deploy public/",
+    "db:create": "npx wrangler d1 create ito-permits"
+  },
+  "devDependencies": {
+    "wrangler": "^3.99.0"
+  }
+}
