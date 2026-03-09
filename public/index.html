@@ -51,11 +51,17 @@
 </head>
 <body>
   <div id="root"></div>
-  <!-- Load components in dependency order -->
-  <script type="text/babel" src="/js/shared.js"></script>
-  <script type="text/babel" src="/js/map.js"></script>
-  <script type="text/babel" src="/js/public.js"></script>
-  <script type="text/babel" src="/js/staff.js"></script>
-  <script type="text/babel" src="/js/app.js"></script>
+  <script>
+    // Load JS files in order, concatenate, then Babel-compile as one unit
+    (async () => {
+      const files = ['/js/shared.js', '/js/map.js', '/js/public.js', '/js/staff.js', '/js/app.js'];
+      const sources = await Promise.all(files.map(f => fetch(f).then(r => r.text())));
+      const combined = sources.join('\n;\n');
+      const compiled = Babel.transform(combined, { presets: ['react'] }).code;
+      const script = document.createElement('script');
+      script.textContent = compiled;
+      document.body.appendChild(script);
+    })();
+  </script>
 </body>
 </html>

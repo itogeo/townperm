@@ -79,11 +79,12 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
   const filteredPermits = useMemo(() => {
     return permits.filter(p => {
       const q = searchQuery.toLowerCase();
-      const ms = !q || p.address.toLowerCase().includes(q) || p.id.toLowerCase().includes(q) || p.applicant.toLowerCase().includes(q);
+      const ms = !q || p.address.toLowerCase().includes(q) || p.id.toLowerCase().includes(q) || p.applicant.toLowerCase().includes(q) || (p.type||'').toLowerCase().includes(q) || (p.zone||'').toLowerCase().includes(q);
       return ms && (statusFilter === 'all' || p.status === statusFilter);
     }).sort((a, b) => {
-      let va = a[sortField] || '', vb = b[sortField] || '';
-      if (sortField === 'valuation') { va = a.valuation || 0; vb = b.valuation || 0; }
+      const numFields = ['valuation', 'fees', 'fees_paid'];
+      let va = numFields.includes(sortField) ? (Number(a[sortField]) || 0) : (a[sortField] || '');
+      let vb = numFields.includes(sortField) ? (Number(b[sortField]) || 0) : (b[sortField] || '');
       return va < vb ? (sortDir === 'asc' ? -1 : 1) : va > vb ? (sortDir === 'asc' ? 1 : -1) : 0;
     });
   }, [permits, searchQuery, statusFilter, sortField, sortDir]);
@@ -465,27 +466,49 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
                       <button onClick={exportCSV} className="text-gray-400 hover:text-gray-600 p-1.5 hover:bg-gray-100 rounded-lg" title="Export CSV"><Icon name="download" size={15} /></button>
                     </div>
                   </div>
-                  <div className="max-h-[calc(100vh-240px)] overflow-auto">
-                    <table className="w-full">
-                      <thead className="bg-gray-50 text-left text-xs text-gray-500 uppercase tracking-wider sticky top-0">
+                  <div className="max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
+                    <table className="w-full min-w-[1200px] text-xs">
+                      <thead className="bg-gray-50 text-left text-[10px] text-gray-500 uppercase tracking-wider sticky top-0 z-10">
                         <tr>
-                          {[{f:'id',l:'Permit'},{f:'address',l:'Address',h:1},{f:'applicant',l:'Applicant',h:1},{f:'submitted',l:'Date'},{f:'status',l:'Status'}].map(c => (
-                            <th key={c.f} className={`${c.h?'hidden sm:table-cell':''} px-3 py-2.5 font-semibold cursor-pointer hover:text-gray-700 select-none`} onClick={() => toggleSort(c.f)}>
-                              <span className="flex items-center gap-1">{c.l}{sortField===c.f && <Icon name={sortDir==='asc'?'chevron-up':'chevron-down'} size={12} />}</span>
+                          {[
+                            {f:'id',l:'Permit #',w:'w-28'},
+                            {f:'type',l:'Type',w:'w-36'},
+                            {f:'address',l:'Address',w:'w-44'},
+                            {f:'applicant',l:'Applicant',w:'w-36'},
+                            {f:'zone',l:'Zone',w:'w-16'},
+                            {f:'status',l:'Status',w:'w-28'},
+                            {f:'submitted',l:'Submitted',w:'w-24'},
+                            {f:'reviewed',l:'Reviewed',w:'w-24'},
+                            {f:'valuation',l:'Value',w:'w-24'},
+                            {f:'fees',l:'Fees Due',w:'w-20'},
+                            {f:'fees_paid',l:'Fees Paid',w:'w-20'},
+                          ].map(c => (
+                            <th key={c.f} className={`${c.w} px-2 py-2 font-semibold cursor-pointer hover:text-gray-700 select-none whitespace-nowrap border-b border-gray-200`} onClick={() => toggleSort(c.f)}>
+                              <span className="flex items-center gap-0.5">{c.l}{sortField===c.f && <Icon name={sortDir==='asc'?'chevron-up':'chevron-down'} size={10} />}</span>
                             </th>
                           ))}
                         </tr>
                       </thead>
-                      <tbody className="divide-y">
-                        {filteredPermits.map(p => (
-                          <tr key={p.id} className={`hover:bg-sky-50/50 cursor-pointer transition ${selectedPermit?.id===p.id?'bg-sky-50 border-l-2 border-sky-500':''}`} onClick={() => loadDetail(p)}>
-                            <td className="px-3 py-2.5"><div className="font-semibold text-sm text-sky-700">{p.id}</div><div className="text-[10px] text-gray-400">{p.type}</div></td>
-                            <td className="hidden sm:table-cell px-3 py-2.5 text-sm">{p.address}</td>
-                            <td className="hidden sm:table-cell px-3 py-2.5 text-sm text-gray-600">{p.applicant}</td>
-                            <td className="px-3 py-2.5 text-xs text-gray-500">{p.submitted}</td>
-                            <td className="px-3 py-2.5"><StatusBadge status={p.status} /></td>
+                      <tbody className="divide-y divide-gray-100">
+                        {filteredPermits.map(p => {
+                          const feesDue = p.fees || 0, feesPaid = p.fees_paid || 0;
+                          const feeColor = feesPaid >= feesDue ? 'text-green-600' : feesPaid > 0 ? 'text-amber-600' : 'text-red-500';
+                          return (
+                          <tr key={p.id} className={`hover:bg-sky-50/50 cursor-pointer transition ${selectedPermit?.id===p.id?'bg-sky-50 ring-1 ring-inset ring-sky-300':''}`} onClick={() => loadDetail(p)}>
+                            <td className="px-2 py-2 font-semibold text-sky-700 whitespace-nowrap">{p.id}</td>
+                            <td className="px-2 py-2 text-gray-700 whitespace-nowrap">{p.type}</td>
+                            <td className="px-2 py-2 text-gray-800 font-medium">{p.address}</td>
+                            <td className="px-2 py-2 text-gray-600">{p.applicant}</td>
+                            <td className="px-2 py-2 text-gray-500 text-center font-mono">{p.zone || '—'}</td>
+                            <td className="px-2 py-2"><StatusBadge status={p.status} /></td>
+                            <td className="px-2 py-2 text-gray-500 whitespace-nowrap">{p.submitted || '—'}</td>
+                            <td className="px-2 py-2 text-gray-500 whitespace-nowrap">{p.reviewed || '—'}</td>
+                            <td className="px-2 py-2 text-gray-700 text-right font-mono whitespace-nowrap">{p.valuation ? `$${Number(p.valuation).toLocaleString()}` : '—'}</td>
+                            <td className="px-2 py-2 text-gray-600 text-right font-mono whitespace-nowrap">{feesDue ? `$${feesDue.toLocaleString()}` : '—'}</td>
+                            <td className={`px-2 py-2 text-right font-mono font-semibold whitespace-nowrap ${feeColor}`}>{feesPaid ? `$${feesPaid.toLocaleString()}` : '—'}</td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
