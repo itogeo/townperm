@@ -5,14 +5,16 @@
 import { INIT_SQL, MIGRATION_SQL } from './schema.js';
 import { SEED_SQL } from './seed.js';
 
-export const CITY_CONFIG = {
-  city_name: 'Three Forks',
-  city_state: 'MT',
-  map_center: [-111.5513, 45.8930],
-  map_zoom: 14,
-  mapbox_token: 'pk.eyJ1IjoiaXRvZ2VvIiwiYSI6ImNta3ByYnA1bzBsYW0zZG9mMnMxdWZwMjUifQ.Q7pwAuAEKdBHD_dqaVBhvw',
-  county: 'Gallatin',
-};
+export function getCityConfig(env) {
+  return {
+    city_name: 'Three Forks',
+    city_state: 'MT',
+    map_center: [-111.5513, 45.8930],
+    map_zoom: 14,
+    mapbox_token: env?.MAPBOX_TOKEN || '',
+    county: 'Gallatin',
+  };
+}
 
 export function json(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {

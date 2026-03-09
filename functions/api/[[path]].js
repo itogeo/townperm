@@ -3,7 +3,7 @@
 // Cloudflare Pages Functions catch-all for /api/* routes
 // ==========================================================================
 
-import { CITY_CONFIG, json, getCookie, getUser, ensureDB, logActivity } from './lib/helpers.js';
+import { getCityConfig, json, getCookie, getUser, ensureDB, logActivity } from './lib/helpers.js';
 import { handlePermits } from './lib/permits.js';
 import { handleLicenses } from './lib/licenses.js';
 import { handleParks } from './lib/parks.js';
@@ -23,7 +23,7 @@ export async function onRequest(context) {
     // CONFIG
     // ==================================================================
     if (method === 'GET' && path === '/config') {
-      return json(CITY_CONFIG);
+      return json(getCityConfig(env));
     }
 
     // ==================================================================

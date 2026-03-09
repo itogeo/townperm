@@ -30,7 +30,7 @@ CITY_CONFIG = {
     'city_state': 'MT',
     'map_center': [-111.5513, 45.8930],
     'map_zoom': 14,
-    'mapbox_token': 'pk.eyJ1IjoiaXRvZ2VvIiwiYSI6ImNtNnphb29uMDA2dTYycm9mNTNvNjdvNjQifQ.l0eaBrNbQV7B4VNiyPKd0A',
+    'mapbox_token': '',  # Set via MAPBOX_TOKEN env var in Cloudflare
     'county': 'Gallatin',
     'timezone': 'America/Denver'
 }

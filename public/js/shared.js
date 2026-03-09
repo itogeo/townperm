@@ -4,7 +4,7 @@
 const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
 const DEFAULT_CONFIG = {
-  mapboxToken: 'pk.eyJ1IjoiaXRvZ2VvIiwiYSI6ImNta3ByYnA1bzBsYW0zZG9mMnMxdWZwMjUifQ.Q7pwAuAEKdBHD_dqaVBhvw',
+  mapboxToken: '',
   cityName: 'Three Forks', cityState: 'MT',
   mapCenter: [-111.5513, 45.8930], mapZoom: 14,
 };
