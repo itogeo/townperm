@@ -2,7 +2,7 @@
 // CITIZEN REQUESTS MODULE — map-based issue reporting
 // ==========================================================================
 
-import { json, getUser, logActivity, queueEmail, nextNumber } from './helpers.js';
+import { json, getUser, logActivity, queueEmail, nextNumber, requireAuth, parseBody, sanitize, VALID_STATUSES } from './helpers.js';
 
 export async function handleRequests(method, path, url, request, db) {
 
@@ -34,9 +34,11 @@ export async function handleRequests(method, path, url, request, db) {
     return json(results.results);
   }
 
-  // POST /requests
+  // POST /requests — public
   if (method === 'POST' && path === '/requests') {
-    const data = await request.json();
+    const { data, error: bodyErr } = await parseBody(request, 5 * 1024 * 1024);
+    if (bodyErr) return bodyErr;
+    if (!data.description?.trim()) return json({ error: 'Description required' }, 400);
 
     const category = await db.prepare('SELECT * FROM request_categories WHERE id = ? OR code = ?')
       .bind(data.category_id || 0, data.category_code || '').first();
@@ -103,11 +105,15 @@ export async function handleRequests(method, path, url, request, db) {
     return json({ ...req, activity: activity.results, comments: comments.results });
   }
 
-  // PUT /requests/:id
+  // PUT /requests/:id — staff only
   if (method === 'PUT' && idMatch) {
+    const auth = await requireAuth(request, db);
+    if (auth.error) return auth.error;
     const reqId = parseInt(idMatch[1]);
-    const data = await request.json();
-    const user = await getUser(request, db);
+    const { data, error: bodyErr } = await parseBody(request);
+    if (bodyErr) return bodyErr;
+    if (data.status && !VALID_STATUSES.requests.includes(data.status)) return json({ error: 'Invalid status' }, 400);
+    const user = auth.user;
 
     const updates = [], bindings = [];
     const allowed = ['status', 'priority', 'assigned_to', 'resolution', 'address', 'description'];
@@ -137,16 +143,19 @@ export async function handleRequests(method, path, url, request, db) {
     return json({ success: true });
   }
 
-  // POST /requests/:id/comments
+  // POST /requests/:id/comments — staff only
   const commentMatch = path.match(/^\/requests\/(\d+)\/comments$/);
   if (commentMatch) {
     const reqId = parseInt(commentMatch[1]);
     if (method === 'POST') {
-      const data = await request.json();
-      const user = await getUser(request, db);
-      const authorName = user ? `${user.first_name} ${user.last_name}` : 'Staff';
+      const auth = await requireAuth(request, db);
+      if (auth.error) return auth.error;
+      const { data, error: bodyErr } = await parseBody(request);
+      if (bodyErr) return bodyErr;
+      if (!data.comment?.trim()) return json({ error: 'Comment required' }, 400);
+      const user = auth.user;
       const result = await db.prepare("INSERT INTO comments (module, ref_id, user_id, author_name, comment, is_internal) VALUES ('requests', ?, ?, ?, ?, ?)")
-        .bind(reqId, user?.id || null, authorName, data.comment, data.is_internal !== false ? 1 : 0).run();
+        .bind(reqId, user.id, `${user.first_name} ${user.last_name}`, sanitize(data.comment, 10000), data.is_internal !== false ? 1 : 0).run();
       return json({ id: result.meta.last_row_id }, 201);
     }
     const r = await db.prepare("SELECT c.*, u.first_name, u.last_name FROM comments c LEFT JOIN users u ON c.user_id = u.id WHERE c.module = 'requests' AND c.ref_id = ? ORDER BY c.created_at DESC").bind(reqId).all();

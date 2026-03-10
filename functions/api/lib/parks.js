@@ -2,7 +2,7 @@
 // PARK RESERVATIONS MODULE
 // ==========================================================================
 
-import { json, getUser, logActivity, queueEmail, nextNumber } from './helpers.js';
+import { json, getUser, logActivity, queueEmail, nextNumber, requireAuth, parseBody, sanitize, VALID_STATUSES } from './helpers.js';
 
 export async function handleParks(method, path, url, request, db) {
 
@@ -34,9 +34,11 @@ export async function handleParks(method, path, url, request, db) {
     return json(results.results);
   }
 
-  // POST /parks/reservations
+  // POST /parks/reservations — public
   if (method === 'POST' && path === '/parks/reservations') {
-    const data = await request.json();
+    const { data, error: bodyErr } = await parseBody(request);
+    if (bodyErr) return bodyErr;
+    if (!data.facility_id || !data.event_date || !data.contact_name) return json({ error: 'facility_id, event_date, and contact_name required' }, 400);
     const facility = await db.prepare('SELECT * FROM park_facilities WHERE id = ?').bind(data.facility_id).first();
     if (!facility) return json({ error: 'Invalid facility' }, 400);
 
@@ -96,11 +98,15 @@ export async function handleParks(method, path, url, request, db) {
     return json({ ...res, activity: activity.results, payments: payments.results });
   }
 
-  // PUT /parks/reservations/:id
+  // PUT /parks/reservations/:id — staff only
   if (method === 'PUT' && idMatch) {
+    const auth = await requireAuth(request, db);
+    if (auth.error) return auth.error;
     const resId = parseInt(idMatch[1]);
-    const data = await request.json();
-    const user = await getUser(request, db);
+    const { data, error: bodyErr } = await parseBody(request);
+    if (bodyErr) return bodyErr;
+    if (data.status && !VALID_STATUSES.parks.includes(data.status)) return json({ error: 'Invalid status' }, 400);
+    const user = auth.user;
 
     const updates = [], bindings = [];
     const allowed = ['status', 'contact_name', 'contact_phone', 'contact_email', 'event_name', 'event_description', 'event_date', 'start_time', 'end_time', 'attendee_count', 'staff_notes', 'fees_paid'];

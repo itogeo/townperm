@@ -3,7 +3,7 @@
 // Cloudflare Pages Functions catch-all for /api/* routes
 // ==========================================================================
 
-import { getCityConfig, json, getCookie, getUser, ensureDB, logActivity } from './lib/helpers.js';
+import { getCityConfig, json, getCookie, getUser, ensureDB, logActivity, requireAuth, parseBody, VALID_STATUSES } from './lib/helpers.js';
 import { handlePermits } from './lib/permits.js';
 import { handleLicenses } from './lib/licenses.js';
 import { handleParks } from './lib/parks.js';
@@ -44,7 +44,7 @@ export async function onRequest(context) {
       }), {
         headers: {
           'Content-Type': 'application/json',
-          'Set-Cookie': `session=${token}; HttpOnly; Path=/; SameSite=Strict; Max-Age=${7 * 24 * 60 * 60}`,
+          'Set-Cookie': `session=${token}; HttpOnly; Secure; Path=/; SameSite=Strict; Max-Age=${7 * 24 * 60 * 60}`,
         },
       });
     }
@@ -188,7 +188,10 @@ export async function onRequest(context) {
     // DEADLINES
     // ==================================================================
     if (method === 'POST' && path === '/deadlines') {
-      const data = await request.json();
+      const auth = await requireAuth(request, db);
+      if (auth.error) return auth.error;
+      const { data, error: bodyErr } = await parseBody(request);
+      if (bodyErr) return bodyErr;
       const result = await db.prepare(
         'INSERT INTO deadlines (module, ref_id, title, due_date, deadline_type, description) VALUES (?, ?, ?, ?, ?, ?)'
       ).bind(data.module || 'permits', data.ref_id || null, data.title, data.due_date, data.deadline_type || 'other', data.description || null).run();
@@ -197,8 +200,11 @@ export async function onRequest(context) {
 
     const dlUpdateMatch = path.match(/^\/deadlines\/(\d+)$/);
     if (method === 'PUT' && dlUpdateMatch) {
+      const auth = await requireAuth(request, db);
+      if (auth.error) return auth.error;
       const dlId = parseInt(dlUpdateMatch[1]);
-      const data = await request.json();
+      const { data, error: bodyErr } = await parseBody(request);
+      if (bodyErr) return bodyErr;
       if (data.is_completed) await db.prepare("UPDATE deadlines SET is_completed = 1, completed_at = datetime('now') WHERE id = ?").bind(dlId).run();
       if (data.due_date) await db.prepare('UPDATE deadlines SET due_date = ? WHERE id = ?').bind(data.due_date, dlId).run();
       return json({ success: true });

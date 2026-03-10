@@ -19,8 +19,42 @@ export function getCityConfig(env) {
 export function json(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', ...extraHeaders },
+    headers: { 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff', ...extraHeaders },
   });
+}
+
+// Auth guard — returns user or 401/403 Response
+export async function requireAuth(request, db, requiredRole = null) {
+  const user = await getUser(request, db);
+  if (!user) return { error: json({ error: 'Authentication required' }, 401) };
+  if (requiredRole && user.role !== requiredRole && user.role !== 'admin') return { error: json({ error: 'Insufficient permissions' }, 403) };
+  return { user };
+}
+
+// Validate status against allowed values
+export const VALID_STATUSES = {
+  permits: ['pending', 'under_review', 'approved', 'denied', 'completed', 'cancelled'],
+  licenses: ['pending', 'under_review', 'active', 'denied', 'suspended', 'expired', 'cancelled'],
+  parks: ['pending', 'approved', 'denied', 'cancelled'],
+  requests: ['submitted', 'in_progress', 'resolved', 'closed', 'cancelled'],
+};
+
+// Safe JSON parse with size limit (default 2MB)
+export async function parseBody(request, maxBytes = 2 * 1024 * 1024) {
+  const contentLength = parseInt(request.headers.get('content-length') || '0');
+  if (contentLength > maxBytes) return { error: json({ error: `Request body too large (max ${Math.round(maxBytes/1024/1024)}MB)` }, 413) };
+  try {
+    return { data: await request.json() };
+  } catch {
+    return { error: json({ error: 'Invalid JSON in request body' }, 400) };
+  }
+}
+
+// Sanitize text input — trim, limit length
+export function sanitize(val, maxLen = 5000) {
+  if (val === null || val === undefined) return null;
+  if (typeof val !== 'string') return val;
+  return val.trim().slice(0, maxLen);
 }
 
 export function getCookie(request, name) {
@@ -41,7 +75,9 @@ export async function getUser(request, db) {
   ).bind(sess.user_id).first();
 }
 
+let _dbReady = false;
 export async function ensureDB(db) {
+  if (_dbReady) return;
   const check = await db.prepare(
     "SELECT name FROM sqlite_master WHERE type='table' AND name='permits'"
   ).first();
@@ -94,6 +130,9 @@ export async function ensureDB(db) {
   for (const sql of colMigrations) {
     try { await db.exec(sql); } catch {}
   }
+  // Clean up expired sessions (fire and forget)
+  db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')").run().catch(() => {});
+  _dbReady = true;
 }
 
 // Extract INSERT statements for a specific table from seed SQL

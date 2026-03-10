@@ -2,7 +2,7 @@
 // PERMITS MODULE — all permit-related API routes
 // ==========================================================================
 
-import { json, getUser, logActivity, queueEmail, nextNumber } from './helpers.js';
+import { json, getUser, logActivity, queueEmail, nextNumber, requireAuth, parseBody, sanitize, VALID_STATUSES } from './helpers.js';
 
 export async function handlePermits(method, path, url, request, db) {
 
@@ -29,15 +29,21 @@ export async function handlePermits(method, path, url, request, db) {
       b.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
     query += ' ORDER BY p.submitted_at DESC';
+    const limit = Math.min(parseInt(url.searchParams.get('limit') || '200'), 500);
+    const offset = parseInt(url.searchParams.get('offset') || '0');
+    query += ' LIMIT ? OFFSET ?';
+    b.push(limit, offset);
 
     const stmt = db.prepare(query);
-    const results = b.length > 0 ? await stmt.bind(...b).all() : await stmt.all();
+    const results = await stmt.bind(...b).all();
     return json(results.results);
   }
 
-  // POST /permits
+  // POST /permits — public, no auth required (citizen submission)
   if (method === 'POST' && path === '/permits') {
-    const data = await request.json();
+    const { data, error: bodyErr } = await parseBody(request, 5 * 1024 * 1024); // 5MB for file uploads
+    if (bodyErr) return bodyErr;
+    if (!data.address && !data.parcel_id) return json({ error: 'Address or parcel ID required' }, 400);
     const permitType = await db.prepare('SELECT * FROM permit_types WHERE code = ?').bind(data.permit_type_code || 'ZP').first();
     if (!permitType) return json({ error: 'Invalid permit type' }, 400);
 
@@ -123,12 +129,16 @@ export async function handlePermits(method, path, url, request, db) {
     return json({ ...permit, parcel, activity: activity.results, inspections: inspections.results, comments: comments.results, payments: payments.results, documents: documents.results, deadlines: deadlines.results });
   }
 
-  // PUT /permits/:id
+  // PUT /permits/:id — staff only
   const updateMatch = path.match(/^\/permits\/(\d+)$/);
   if (method === 'PUT' && updateMatch) {
+    const auth = await requireAuth(request, db);
+    if (auth.error) return auth.error;
     const permitId = parseInt(updateMatch[1]);
-    const data = await request.json();
-    const user = await getUser(request, db);
+    const { data, error: bodyErr } = await parseBody(request);
+    if (bodyErr) return bodyErr;
+    if (data.status && !VALID_STATUSES.permits.includes(data.status)) return json({ error: `Invalid status. Allowed: ${VALID_STATUSES.permits.join(', ')}` }, 400);
+    const user = auth.user;
     const permit = await db.prepare('SELECT * FROM permits WHERE id = ?').bind(permitId).first();
     if (!permit) return json({ error: 'Permit not found' }, 404);
 
@@ -167,13 +177,17 @@ export async function handlePermits(method, path, url, request, db) {
     return json({ success: true });
   }
 
-  // POST /permits/:id/inspections
+  // POST /permits/:id/inspections — staff only
   const inspMatch = path.match(/^\/permits\/(\d+)\/inspections$/);
   if (inspMatch) {
     const permitId = parseInt(inspMatch[1]);
     if (method === 'POST') {
-      const data = await request.json();
-      const user = await getUser(request, db);
+      const auth = await requireAuth(request, db);
+      if (auth.error) return auth.error;
+      const { data, error: bodyErr } = await parseBody(request);
+      if (bodyErr) return bodyErr;
+      if (!data.inspection_type || !data.scheduled_date) return json({ error: 'inspection_type and scheduled_date required' }, 400);
+      const user = auth.user;
       const result = await db.prepare(
         "INSERT INTO inspections (permit_id, inspection_type, status, scheduled_date, inspector_id, notes) VALUES (?, ?, 'scheduled', ?, ?, ?)"
       ).bind(permitId, data.inspection_type, data.scheduled_date, user?.id || null, data.notes || null).run();
@@ -189,12 +203,15 @@ export async function handlePermits(method, path, url, request, db) {
     }
   }
 
-  // PUT /inspections/:id
+  // PUT /inspections/:id — staff only
   const inspUpdateMatch = path.match(/^\/inspections\/(\d+)$/);
   if (method === 'PUT' && inspUpdateMatch) {
+    const auth = await requireAuth(request, db);
+    if (auth.error) return auth.error;
     const inspId = parseInt(inspUpdateMatch[1]);
-    const data = await request.json();
-    const user = await getUser(request, db);
+    const { data, error: bodyErr } = await parseBody(request);
+    if (bodyErr) return bodyErr;
+    const user = auth.user;
     const updates = [], b = [];
     if (data.status) { updates.push('status = ?'); b.push(data.status); }
     if (data.result) { updates.push('result = ?'); b.push(data.result); }
@@ -214,25 +231,33 @@ export async function handlePermits(method, path, url, request, db) {
   if (commentMatch) {
     const permitId = parseInt(commentMatch[1]);
     if (method === 'POST') {
-      const data = await request.json();
-      const user = await getUser(request, db);
-      const authorName = user ? `${user.first_name} ${user.last_name}` : (data.author_name || 'Staff');
+      const auth = await requireAuth(request, db);
+      if (auth.error) return auth.error;
+      const { data, error: bodyErr } = await parseBody(request);
+      if (bodyErr) return bodyErr;
+      if (!data.comment?.trim()) return json({ error: 'Comment text required' }, 400);
+      const user = auth.user;
+      const authorName = `${user.first_name} ${user.last_name}`;
       const result = await db.prepare("INSERT INTO comments (module, ref_id, user_id, author_name, comment, is_internal) VALUES ('permits', ?, ?, ?, ?, ?)")
-        .bind(permitId, user?.id || null, authorName, data.comment, data.is_internal !== false ? 1 : 0).run();
-      await logActivity(db, 'permits', permitId, user?.id, 'Comment added', data.comment.substring(0, 100));
+        .bind(permitId, user.id, authorName, sanitize(data.comment, 10000), data.is_internal !== false ? 1 : 0).run();
+      await logActivity(db, 'permits', permitId, user.id, 'Comment added', data.comment.substring(0, 100));
       return json({ id: result.meta.last_row_id }, 201);
     }
     const r = await db.prepare("SELECT c.*, u.first_name, u.last_name FROM comments c LEFT JOIN users u ON c.user_id = u.id WHERE c.module = 'permits' AND c.ref_id = ? ORDER BY c.created_at DESC").bind(permitId).all();
     return json(r.results);
   }
 
-  // POST/GET /permits/:id/payments
+  // POST/GET /permits/:id/payments — staff only
   const payMatch = path.match(/^\/permits\/(\d+)\/payments$/);
   if (payMatch) {
     const permitId = parseInt(payMatch[1]);
     if (method === 'POST') {
-      const data = await request.json();
-      const user = await getUser(request, db);
+      const auth = await requireAuth(request, db);
+      if (auth.error) return auth.error;
+      const { data, error: bodyErr } = await parseBody(request);
+      if (bodyErr) return bodyErr;
+      if (!data.amount || isNaN(data.amount) || data.amount <= 0) return json({ error: 'Valid positive amount required' }, 400);
+      const user = auth.user;
       const result = await db.prepare("INSERT INTO fee_payments (module, ref_id, amount, payment_method, reference_number, description, received_by) VALUES ('permits', ?, ?, ?, ?, ?, ?)")
         .bind(permitId, data.amount, data.payment_method || 'other', data.reference_number || null, data.description || null, user?.id || null).run();
       const totalPaid = await db.prepare("SELECT COALESCE(SUM(amount), 0) as total FROM fee_payments WHERE module = 'permits' AND ref_id = ?").bind(permitId).first();
@@ -244,13 +269,17 @@ export async function handlePermits(method, path, url, request, db) {
     return json(r.results);
   }
 
-  // POST/GET /permits/:id/documents
+  // POST/GET /permits/:id/documents — staff only for POST
   const docMatch = path.match(/^\/permits\/(\d+)\/documents$/);
   if (docMatch) {
     const permitId = parseInt(docMatch[1]);
     if (method === 'POST') {
-      const data = await request.json();
-      const user = await getUser(request, db);
+      const auth = await requireAuth(request, db);
+      if (auth.error) return auth.error;
+      const { data, error: bodyErr } = await parseBody(request, 5 * 1024 * 1024); // 5MB
+      if (bodyErr) return bodyErr;
+      if (!data.filename) return json({ error: 'Filename required' }, 400);
+      const user = auth.user;
       const result = await db.prepare("INSERT INTO documents (module, ref_id, filename, doc_type, file_size, file_data, uploaded_by, notes) VALUES ('permits', ?, ?, ?, ?, ?, ?, ?)")
         .bind(permitId, data.filename, data.doc_type || 'other', data.file_size || 0, data.file_data || null, user?.id || null, data.notes || null).run();
       await logActivity(db, 'permits', permitId, user?.id, 'Document added', data.filename);

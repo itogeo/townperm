@@ -2,7 +2,7 @@
 // BUSINESS LICENSES MODULE
 // ==========================================================================
 
-import { json, getUser, logActivity, queueEmail, nextNumber } from './helpers.js';
+import { json, getUser, logActivity, queueEmail, nextNumber, requireAuth, parseBody, sanitize, VALID_STATUSES } from './helpers.js';
 
 export async function handleLicenses(method, path, url, request, db) {
 
@@ -27,9 +27,11 @@ export async function handleLicenses(method, path, url, request, db) {
     return json(results.results);
   }
 
-  // POST /licenses
+  // POST /licenses — public
   if (method === 'POST' && path === '/licenses') {
-    const data = await request.json();
+    const { data, error: bodyErr } = await parseBody(request);
+    if (bodyErr) return bodyErr;
+    if (!data.business_name?.trim()) return json({ error: 'Business name required' }, 400);
     const licType = await db.prepare('SELECT * FROM license_types WHERE id = ? OR code = ?')
       .bind(data.license_type_id || 0, data.license_type_code || '').first();
     if (!licType) return json({ error: 'Invalid license type' }, 400);
@@ -82,11 +84,15 @@ export async function handleLicenses(method, path, url, request, db) {
     return json({ ...lic, activity: activity.results, comments: comments.results, payments: payments.results, documents: documents.results });
   }
 
-  // PUT /licenses/:id
+  // PUT /licenses/:id — staff only
   if (method === 'PUT' && idMatch) {
+    const auth = await requireAuth(request, db);
+    if (auth.error) return auth.error;
     const licId = parseInt(idMatch[1]);
-    const data = await request.json();
-    const user = await getUser(request, db);
+    const { data, error: bodyErr } = await parseBody(request);
+    if (bodyErr) return bodyErr;
+    if (data.status && !VALID_STATUSES.licenses.includes(data.status)) return json({ error: `Invalid status` }, 400);
+    const user = auth.user;
 
     const updates = [], bindings = [];
     const allowed = ['status', 'business_name', 'dba_name', 'owner_name', 'owner_phone', 'owner_email', 'address', 'mailing_address', 'description', 'employee_count', 'notes', 'fees_paid', 'issued_date', 'expiration_date'];
@@ -122,29 +128,36 @@ export async function handleLicenses(method, path, url, request, db) {
     return json(types.results);
   }
 
-  // POST /licenses/:id/comments
+  // POST /licenses/:id/comments — staff only
   const commentMatch = path.match(/^\/licenses\/(\d+)\/comments$/);
   if (commentMatch) {
     const licId = parseInt(commentMatch[1]);
     if (method === 'POST') {
-      const data = await request.json();
-      const user = await getUser(request, db);
-      const authorName = user ? `${user.first_name} ${user.last_name}` : 'Staff';
+      const auth = await requireAuth(request, db);
+      if (auth.error) return auth.error;
+      const { data, error: bodyErr } = await parseBody(request);
+      if (bodyErr) return bodyErr;
+      if (!data.comment?.trim()) return json({ error: 'Comment required' }, 400);
+      const user = auth.user;
       const result = await db.prepare("INSERT INTO comments (module, ref_id, user_id, author_name, comment, is_internal) VALUES ('licenses', ?, ?, ?, ?, 1)")
-        .bind(licId, user?.id || null, authorName, data.comment).run();
+        .bind(licId, user.id, `${user.first_name} ${user.last_name}`, sanitize(data.comment, 10000)).run();
       return json({ id: result.meta.last_row_id }, 201);
     }
     const r = await db.prepare("SELECT c.*, u.first_name, u.last_name FROM comments c LEFT JOIN users u ON c.user_id = u.id WHERE c.module = 'licenses' AND c.ref_id = ? ORDER BY c.created_at DESC").bind(licId).all();
     return json(r.results);
   }
 
-  // POST /licenses/:id/payments
+  // POST /licenses/:id/payments — staff only
   const payMatch = path.match(/^\/licenses\/(\d+)\/payments$/);
   if (payMatch) {
     const licId = parseInt(payMatch[1]);
     if (method === 'POST') {
-      const data = await request.json();
-      const user = await getUser(request, db);
+      const auth = await requireAuth(request, db);
+      if (auth.error) return auth.error;
+      const { data, error: bodyErr } = await parseBody(request);
+      if (bodyErr) return bodyErr;
+      if (!data.amount || isNaN(data.amount) || data.amount <= 0) return json({ error: 'Valid positive amount required' }, 400);
+      const user = auth.user;
       const result = await db.prepare("INSERT INTO fee_payments (module, ref_id, amount, payment_method, reference_number, description, received_by) VALUES ('licenses', ?, ?, ?, ?, ?, ?)")
         .bind(licId, data.amount, data.payment_method || 'other', data.reference_number || null, data.description || null, user?.id || null).run();
       const totalPaid = await db.prepare("SELECT COALESCE(SUM(amount), 0) as total FROM fee_payments WHERE module = 'licenses' AND ref_id = ?").bind(licId).first();

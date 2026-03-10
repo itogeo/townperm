@@ -202,6 +202,32 @@ CREATE TABLE IF NOT EXISTS email_queue (
   sent_at TEXT, error TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
+
+-- ===================== INDEXES =====================
+CREATE INDEX IF NOT EXISTS idx_permits_status ON permits(status);
+CREATE INDEX IF NOT EXISTS idx_permits_number ON permits(permit_number);
+CREATE INDEX IF NOT EXISTS idx_permits_submitted ON permits(submitted_at);
+CREATE INDEX IF NOT EXISTS idx_permits_assigned ON permits(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_permits_parcel ON permits(parcel_id);
+CREATE INDEX IF NOT EXISTS idx_inspections_permit ON inspections(permit_id);
+CREATE INDEX IF NOT EXISTS idx_inspections_date ON inspections(scheduled_date);
+CREATE INDEX IF NOT EXISTS idx_comments_module_ref ON comments(module, ref_id);
+CREATE INDEX IF NOT EXISTS idx_payments_module_ref ON fee_payments(module, ref_id);
+CREATE INDEX IF NOT EXISTS idx_documents_module_ref ON documents(module, ref_id);
+CREATE INDEX IF NOT EXISTS idx_activity_module_ref ON activity_log(module, ref_id);
+CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_deadlines_due ON deadlines(due_date);
+CREATE INDEX IF NOT EXISTS idx_deadlines_module_ref ON deadlines(module, ref_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_licenses_status ON business_licenses(status);
+CREATE INDEX IF NOT EXISTS idx_licenses_number ON business_licenses(license_number);
+CREATE INDEX IF NOT EXISTS idx_reservations_date ON park_reservations(event_date);
+CREATE INDEX IF NOT EXISTS idx_reservations_facility ON park_reservations(facility_id);
+CREATE INDEX IF NOT EXISTS idx_requests_status ON citizen_requests(status);
+CREATE INDEX IF NOT EXISTS idx_requests_number ON citizen_requests(request_number);
+CREATE INDEX IF NOT EXISTS idx_parcels_parcel_id ON parcels(parcel_id);
+CREATE INDEX IF NOT EXISTS idx_email_queue_status ON email_queue(status);
 `;
 
 // Migration SQL for existing DBs that only have the permits tables
