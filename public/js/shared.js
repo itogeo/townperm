@@ -18,6 +18,8 @@ const STATUS_CONFIG = {
   submitted: { bg: 'bg-yellow-100', text: 'text-yellow-800', color: '#eab308', label: 'SUBMITTED' },
   in_progress: { bg: 'bg-blue-100', text: 'text-blue-800', color: '#3b82f6', label: 'IN PROGRESS' },
   resolved: { bg: 'bg-green-100', text: 'text-green-800', color: '#22c55e', label: 'RESOLVED' },
+  received: { bg: 'bg-indigo-100', text: 'text-indigo-800', color: '#6366f1', label: 'RECEIVED' },
+  reviewed: { bg: 'bg-teal-100', text: 'text-teal-800', color: '#14b8a6', label: 'REVIEWED' },
   cancelled: { bg: 'bg-gray-100', text: 'text-gray-800', color: '#6b7280', label: 'CANCELLED' },
   completed: { bg: 'bg-emerald-100', text: 'text-emerald-800', color: '#059669', label: 'COMPLETED' },
 };
@@ -107,6 +109,7 @@ const api = {
   lookupApplication: (number, email) => api.request(`/api/lookup?number=${encodeURIComponent(number)}${email ? '&email=' + encodeURIComponent(email) : ''}`),
   submitForm: (data) => api.request('/api/forms', { method: 'POST', body: JSON.stringify(data) }),
   getForms: (params = {}) => { const qs = new URLSearchParams(params).toString(); return api.request(`/api/forms${qs ? '?' + qs : ''}`); },
+  updateForm: (id, data) => api.request(`/api/forms/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 };
 
 // Hash-based SPA routing

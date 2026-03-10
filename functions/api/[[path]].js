@@ -125,6 +125,22 @@ export async function onRequest(context) {
           : await db.prepare('SELECT * FROM form_submissions ORDER BY submitted_at DESC LIMIT 200').all();
         return json(q.results.map(r => ({ ...r, data: JSON.parse(r.data || '{}') })));
       }
+      const formIdMatch = path.match(/^\/forms\/(\d+)$/);
+      if (method === 'PUT' && formIdMatch) {
+        const auth = await requireAuth(request, db);
+        if (auth.error) return auth.error;
+        const id = parseInt(formIdMatch[1]);
+        const body = await request.json();
+        const sets = [], vals = [];
+        if (body.status) { sets.push('status = ?'); vals.push(body.status); }
+        if (body.staff_notes !== undefined) { sets.push('staff_notes = ?'); vals.push(body.staff_notes); }
+        if (body.status === 'reviewed') { sets.push("reviewed_at = datetime('now')"); sets.push('reviewed_by = ?'); vals.push(auth.user.id); }
+        if (!sets.length) return json({ error: 'No updates' }, 400);
+        vals.push(id);
+        await db.prepare(`UPDATE form_submissions SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
+        await logActivity(db, 'forms', id, `Form ${body.status || 'updated'}`, null, auth.user.id);
+        return json({ success: true });
+      }
     }
 
     // ==================================================================

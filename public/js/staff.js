@@ -40,12 +40,15 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
   const [moduleSearch, setModuleSearch] = useState('');
   const [moduleComment, setModuleComment] = useState('');
   const [moduleLoading, setModuleLoading] = useState(false);
+  const [formSubmissions, setFormSubmissions] = useState([]);
+  const [selectedForm, setSelectedForm] = useState(null);
   const toast = useToast();
 
   const pendingCount = permits.filter(p => p.status === 'pending' || p.status === 'under_review').length;
   const pendingLicenses = licenses.filter(l => l.status === 'pending').length;
   const openRequests = requests.filter(r => r.status === 'submitted' || r.status === 'in_progress').length;
   const pendingReservations = reservations.filter(r => r.status === 'pending').length;
+  const pendingForms = formSubmissions.filter(f => f.status === 'received').length;
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' },
@@ -53,29 +56,30 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
     { id: 'licenses', label: 'Business Licenses', icon: 'badge', badge: pendingLicenses },
     { id: 'parks', label: 'Park Reservations', icon: 'trees', badge: pendingReservations },
     { id: 'requests', label: 'Citizen Requests', icon: 'message-circle', badge: openRequests },
+    { id: 'forms', label: 'Form Submissions', icon: 'inbox', badge: pendingForms },
     { id: 'calendar', label: 'Calendar', icon: 'calendar', badge: stats?.upcoming_inspections || 0 },
     { id: 'map', label: 'Map View', icon: 'map' },
     { id: 'reports', label: 'Reports', icon: 'bar-chart-3' },
   ];
 
-  useEffect(() => { if (demoMode) return; if (activeTab === 'licenses' && !licenses.length) { setModuleLoading(true); api.getLicenses().then(setLicenses).catch(() => toast('Failed to load licenses', 'error')).finally(() => setModuleLoading(false)); } if (activeTab === 'parks' && !reservations.length) { setModuleLoading(true); api.getReservations().then(setReservations).catch(() => toast('Failed to load reservations', 'error')).finally(() => setModuleLoading(false)); } if (activeTab === 'requests' && !requests.length) { setModuleLoading(true); api.getRequests().then(setRequests).catch(() => toast('Failed to load requests', 'error')).finally(() => setModuleLoading(false)); } }, [activeTab, demoMode]);
-  useEffect(() => { if (demoMode) return; api.getLicenses().then(setLicenses).catch(() => {}); api.getReservations().then(setReservations).catch(() => {}); api.getRequests().then(setRequests).catch(() => {}); api.getCalendar().then(setCalendarEvents).catch(() => {}); api.getActivity(30).then(setActivityFeed).catch(() => {}); }, [demoMode]);
+  useEffect(() => { if (demoMode) return; if (activeTab === 'licenses' && !licenses.length) { setModuleLoading(true); api.getLicenses().then(setLicenses).catch(() => toast('Failed to load licenses', 'error')).finally(() => setModuleLoading(false)); } if (activeTab === 'parks' && !reservations.length) { setModuleLoading(true); api.getReservations().then(setReservations).catch(() => toast('Failed to load reservations', 'error')).finally(() => setModuleLoading(false)); } if (activeTab === 'requests' && !requests.length) { setModuleLoading(true); api.getRequests().then(setRequests).catch(() => toast('Failed to load requests', 'error')).finally(() => setModuleLoading(false)); } if (activeTab === 'forms' && !formSubmissions.length) { setModuleLoading(true); api.getForms().then(setFormSubmissions).catch(() => toast('Failed to load form submissions', 'error')).finally(() => setModuleLoading(false)); } }, [activeTab, demoMode]);
+  useEffect(() => { if (demoMode) return; api.getLicenses().then(setLicenses).catch(() => {}); api.getReservations().then(setReservations).catch(() => {}); api.getRequests().then(setRequests).catch(() => {}); api.getForms().then(setFormSubmissions).catch(() => {}); api.getCalendar().then(setCalendarEvents).catch(() => {}); api.getActivity(30).then(setActivityFeed).catch(() => {}); }, [demoMode]);
 
-  const notifications = useMemo(() => {
-    const items = [], today = new Date().toISOString().split('T')[0];
-    calendarEvents.filter(e => e.date < today && e.status !== 'completed' && e.type !== 'inspection').forEach(e => items.push({ type: 'overdue', icon: 'alert-triangle', color: 'red', title: `Overdue: ${e.title}`, sub: `Due ${e.date}`, id: `dl-${e.id}` }));
-    permits.filter(p => p.status === 'pending').forEach(p => { const days = Math.floor((Date.now() - new Date(p.submitted).getTime()) / 86400000); if (days > 14) items.push({ type: 'warning', icon: 'clock', color: 'amber', title: `${p.id} pending ${days} days`, sub: p.address, id: `p-${p.id}` }); });
-    calendarEvents.filter(e => e.type === 'inspection' && e.date === today && e.status === 'scheduled').forEach(e => items.push({ type: 'info', icon: 'clipboard-check', color: 'blue', title: `Inspection today: ${e.title}`, sub: e.address, id: `i-${e.id}` }));
-    return items;
-  }, [calendarEvents, permits]);
+  const notifications = useMemo(() => { const items = [], today = new Date().toISOString().split('T')[0];
+    calendarEvents.filter(e => e.date < today && e.status !== 'completed' && e.type !== 'inspection').forEach(e => items.push({ type:'overdue', icon:'alert-triangle', color:'red', title:`Overdue: ${e.title}`, sub:`Due ${e.date}`, id:`dl-${e.id}` }));
+    permits.filter(p => p.status === 'pending').forEach(p => { const days = Math.floor((Date.now()-new Date(p.submitted).getTime())/86400000); if (days>14) items.push({ type:'warning', icon:'clock', color:'amber', title:`${p.id} pending ${days} days`, sub:p.address, id:`p-${p.id}` }); });
+    calendarEvents.filter(e => e.type==='inspection' && e.date===today && e.status==='scheduled').forEach(e => items.push({ type:'info', icon:'clipboard-check', color:'blue', title:`Inspection today: ${e.title}`, sub:e.address, id:`i-${e.id}` }));
+    return items; }, [calendarEvents, permits]);
 
-  const calendarDays = useMemo(() => { const y = calendarMonth.getFullYear(), m = calendarMonth.getMonth(), first = new Date(y, m, 1).getDay(), total = new Date(y, m + 1, 0).getDate(), days = []; for (let i = 0; i < first; i++) days.push(null); for (let d = 1; d <= total; d++) days.push(d); return days; }, [calendarMonth]);
-  const getEventsForDay = useCallback((day) => { if (!day) return []; const ds = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`; return calendarEvents.filter(e => e.date === ds); }, [calendarMonth, calendarEvents]);
+  const calendarDays = useMemo(() => { const y=calendarMonth.getFullYear(),m=calendarMonth.getMonth(),first=new Date(y,m,1).getDay(),total=new Date(y,m+1,0).getDate(),days=[]; for(let i=0;i<first;i++) days.push(null); for(let d=1;d<=total;d++) days.push(d); return days; }, [calendarMonth]);
+  const getEventsForDay = useCallback((day) => { if(!day) return []; const ds=`${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`; return calendarEvents.filter(e=>e.date===ds); }, [calendarMonth, calendarEvents]);
 
-  const loadDetail = async (permit) => { setSelectedPermit(permit); setDetailTab('details'); setPermitDetail(null); if (!demoMode && permit.dbId) { try { setPermitDetail(await api.getPermitDetail(permit.dbId)); } catch { toast('Failed to load permit details', 'error'); } } };
-  const loadLicenseDetail = async (lic) => { setSelectedLicense(lic); setLicenseDetail(null); setModuleComment(''); if (!demoMode && lic.id) { try { setLicenseDetail(await api.getLicenseDetail(lic.id)); } catch { toast('Failed to load license details', 'error'); } } };
-  const loadReservationDetail = async (res) => { setSelectedReservation(res); setReservationDetail(null); setModuleComment(''); if (!demoMode && res.id) { try { setReservationDetail(await api.getReservationDetail(res.id)); } catch { toast('Failed to load reservation details', 'error'); } } };
-  const loadRequestDetail = async (req) => { setSelectedRequest(req); setRequestDetail(null); setModuleComment(''); if (!demoMode && req.id) { try { setRequestDetail(await api.getRequestDetail(req.id)); } catch { toast('Failed to load request details', 'error'); } } };
+  const loadDetail = async (permit) => { setSelectedPermit(permit); setDetailTab('details'); setPermitDetail(null); if (!demoMode && permit.dbId) { try { setPermitDetail(await api.getPermitDetail(permit.dbId)); } catch { toast('Failed to load details','error'); } } };
+  const loadModuleDetail = async (type, item) => { setModuleComment('');
+    if (type==='license') { setSelectedLicense(item); setLicenseDetail(null); if (!demoMode && item.id) try { setLicenseDetail(await api.getLicenseDetail(item.id)); } catch { toast('Failed to load details','error'); } }
+    else if (type==='reservation') { setSelectedReservation(item); setReservationDetail(null); if (!demoMode && item.id) try { setReservationDetail(await api.getReservationDetail(item.id)); } catch { toast('Failed to load details','error'); } }
+    else if (type==='request') { setSelectedRequest(item); setRequestDetail(null); if (!demoMode && item.id) try { setRequestDetail(await api.getRequestDetail(item.id)); } catch { toast('Failed to load details','error'); } }
+  };
 
   const filteredPermits = useMemo(() => {
     return permits.filter(p => {
@@ -165,17 +169,11 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
   };
 
   const printPermit = useCallback((permit, detail) => {
-    const w = window.open('', '_blank');
-    const sc = STATUS_CONFIG[permit.status] || STATUS_CONFIG.pending;
-    w.document.write(`<!DOCTYPE html><html><head><title>Permit ${permit.id}</title><style>body{font-family:Arial,sans-serif;max-width:700px;margin:40px auto;color:#333;font-size:14px;line-height:1.5}h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;color:#0369a1;margin:20px 0 8px;border-bottom:1px solid #e5e7eb;padding-bottom:4px}.hdr{display:flex;justify-content:space-between;border-bottom:2px solid #0369a1;padding-bottom:12px;margin-bottom:20px}.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.lbl{font-size:11px;color:#888;text-transform:uppercase;font-weight:600}.val{font-size:14px;font-weight:600}table{width:100%;border-collapse:collapse;margin:8px 0}td,th{border:1px solid #e5e7eb;padding:6px 10px;text-align:left;font-size:12px}th{background:#f9fafb;font-weight:600}@media print{body{margin:20px}}</style></head><body>
-      <div class="hdr"><div><h1>Town of Three Forks</h1><div style="font-size:12px;color:#0369a1">Development & Permitting</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800">${permit.id}</div><span class="badge" style="background:${sc.color}20;color:${sc.color}">${sc.label}</span></div></div>
-      <div class="grid"><div><div class="lbl">Address</div><div class="val">${permit.address}</div></div><div><div class="lbl">Applicant</div><div class="val">${permit.applicant}</div></div><div><div class="lbl">Type</div><div class="val">${permit.type}</div></div><div><div class="lbl">Value</div><div class="val">$${(permit.valuation||0).toLocaleString()}</div></div><div><div class="lbl">Submitted</div><div class="val">${permit.submitted||'--'}</div></div><div><div class="lbl">Zone</div><div class="val">${permit.zone||'--'}</div></div></div>
-      <h2>Description</h2><p>${permit.description||'--'}</p>
-      ${permit.conditions ? `<h2>Conditions</h2><p>${permit.conditions}</p>` : ''}${permit.denial_reason ? `<h2>Denial Reason</h2><p>${permit.denial_reason}</p>` : ''}
-      ${detail?.inspections?.length ? `<h2>Inspections</h2><table><tr><th>Type</th><th>Date</th><th>Status</th><th>Notes</th></tr>${detail.inspections.map(i=>`<tr><td>${i.inspection_type}</td><td>${i.scheduled_date}</td><td>${i.status}</td><td>${i.notes||''}</td></tr>`).join('')}</table>` : ''}
-      ${detail?.payments?.length ? `<h2>Payments</h2><table><tr><th>Amount</th><th>Method</th><th>Ref</th><th>Date</th></tr>${detail.payments.map(p=>`<tr><td>$${p.amount}</td><td>${p.payment_method}</td><td>${p.reference_number||''}</td><td>${(p.received_at||'').split('T')[0]}</td></tr>`).join('')}</table>` : ''}
-      <div style="margin-top:40px;border-top:1px solid #e5e7eb;padding-top:12px;font-size:11px;color:#888;text-align:center">Town of Three Forks &bull; 206 Main Street &bull; Three Forks, MT 59752 &bull; (406) 285-3431<br/>Printed ${new Date().toLocaleDateString()}</div>
-    </body></html>`);
+    const w = window.open('', '_blank'), sc = STATUS_CONFIG[permit.status] || STATUS_CONFIG.pending;
+    const css='body{font-family:Arial,sans-serif;max-width:700px;margin:40px auto;color:#333;font-size:14px;line-height:1.5}h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;color:#0369a1;margin:20px 0 8px;border-bottom:1px solid #e5e7eb;padding-bottom:4px}.hdr{display:flex;justify-content:space-between;border-bottom:2px solid #0369a1;padding-bottom:12px;margin-bottom:20px}.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.lbl{font-size:11px;color:#888;text-transform:uppercase;font-weight:600}.val{font-size:14px;font-weight:600}table{width:100%;border-collapse:collapse;margin:8px 0}td,th{border:1px solid #e5e7eb;padding:6px 10px;text-align:left;font-size:12px}th{background:#f9fafb;font-weight:600}@media print{body{margin:20px}}';
+    const gf=(l,v)=>`<div><div class="lbl">${l}</div><div class="val">${v}</div></div>`;
+    const tbl=(h,rows)=>rows.length?`<table><tr>${h.map(c=>`<th>${c}</th>`).join('')}</tr>${rows.join('')}</table>`:'';
+    w.document.write(`<!DOCTYPE html><html><head><title>Permit ${permit.id}</title><style>${css}</style></head><body><div class="hdr"><div><h1>Town of Three Forks</h1><div style="font-size:12px;color:#0369a1">Development & Permitting</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800">${permit.id}</div><span class="badge" style="background:${sc.color}20;color:${sc.color}">${sc.label}</span></div></div><div class="grid">${gf('Address',permit.address)}${gf('Applicant',permit.applicant)}${gf('Type',permit.type)}${gf('Value','$'+(permit.valuation||0).toLocaleString())}${gf('Submitted',permit.submitted||'--')}${gf('Zone',permit.zone||'--')}</div><h2>Description</h2><p>${permit.description||'--'}</p>${permit.conditions?`<h2>Conditions</h2><p>${permit.conditions}</p>`:''}${permit.denial_reason?`<h2>Denial Reason</h2><p>${permit.denial_reason}</p>`:''}${detail?.inspections?.length?`<h2>Inspections</h2>${tbl(['Type','Date','Status','Notes'],detail.inspections.map(i=>`<tr><td>${i.inspection_type}</td><td>${i.scheduled_date}</td><td>${i.status}</td><td>${i.notes||''}</td></tr>`))}`:''}${detail?.payments?.length?`<h2>Payments</h2>${tbl(['Amount','Method','Ref','Date'],detail.payments.map(p=>`<tr><td>$${p.amount}</td><td>${p.payment_method}</td><td>${p.reference_number||''}</td><td>${(p.received_at||'').split('T')[0]}</td></tr>`))}`:''}<div style="margin-top:40px;border-top:1px solid #e5e7eb;padding-top:12px;font-size:11px;color:#888;text-align:center">Town of Three Forks &bull; 206 Main Street &bull; Three Forks, MT 59752 &bull; (406) 285-3431<br/>Printed ${new Date().toLocaleDateString()}</div></body></html>`);
     w.document.close(); w.print();
   }, []);
 
@@ -275,7 +273,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
           <ul className="space-y-1">
             {tabs.map(tab => (
               <li key={tab.id}>
-                <button onClick={() => { setActiveTab(tab.id); setSidebarOpen(false); setModuleSearch(''); if (tab.id !== 'permits') { setSelectedPermit(null); setPermitDetail(null); } if (tab.id !== 'licenses') setSelectedLicense(null); if (tab.id !== 'parks') setSelectedReservation(null); if (tab.id !== 'requests') setSelectedRequest(null); }}
+                <button onClick={() => { setActiveTab(tab.id); setSidebarOpen(false); setModuleSearch(''); if (tab.id !== 'permits') { setSelectedPermit(null); setPermitDetail(null); } if (tab.id !== 'licenses') setSelectedLicense(null); if (tab.id !== 'parks') setSelectedReservation(null); if (tab.id !== 'requests') setSelectedRequest(null); if (tab.id !== 'forms') setSelectedForm(null); }}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition text-sm ${activeTab === tab.id ? 'bg-sky-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`}>
                   <Icon name={tab.icon} size={18} /><span>{tab.label}</span>
                   {tab.badge > 0 && <span className="ml-auto bg-yellow-500 text-gray-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{tab.badge}</span>}
@@ -350,7 +348,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
                 <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border">
                   <div className="p-4 border-b flex items-center justify-between">
                     <h3 className="font-bold text-sm flex items-center gap-2"><Icon name="alert-circle" size={15} className="text-amber-500" /> Action Required</h3>
-                    <span className="text-xs text-gray-400">{pendingCount + pendingLicenses + openRequests + pendingReservations} items</span>
+                    <span className="text-xs text-gray-400">{pendingCount + pendingLicenses + openRequests + pendingReservations + pendingForms} items</span>
                   </div>
                   <div className="divide-y max-h-72 overflow-auto">
                     {permits.filter(p => p.status === 'pending' || p.status === 'under_review').map(p => (
@@ -363,7 +361,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
                       </div>
                     ))}
                     {licenses.filter(l => l.status === 'pending').map(l => (
-                      <div key={`l-${l.id}`} className="p-3 flex items-center justify-between hover:bg-gray-50 cursor-pointer" onClick={() => { setActiveTab('licenses'); loadLicenseDetail(l); }}>
+                      <div key={`l-${l.id}`} className="p-3 flex items-center justify-between hover:bg-gray-50 cursor-pointer" onClick={() => { setActiveTab('licenses'); loadModuleDetail('license',l); }}>
                         <div className="flex items-center gap-3">
                           <div className="w-2 h-2 rounded-full bg-purple-500" />
                           <div><div className="font-medium text-sm">{l.license_number || `License #${l.id}`}</div><div className="text-xs text-gray-500">{l.business_name} — License</div></div>
@@ -372,7 +370,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
                       </div>
                     ))}
                     {reservations.filter(r => r.status === 'pending').map(r => (
-                      <div key={`rv-${r.id}`} className="p-3 flex items-center justify-between hover:bg-gray-50 cursor-pointer" onClick={() => { setActiveTab('parks'); loadReservationDetail(r); }}>
+                      <div key={`rv-${r.id}`} className="p-3 flex items-center justify-between hover:bg-gray-50 cursor-pointer" onClick={() => { setActiveTab('parks'); loadModuleDetail('reservation',r); }}>
                         <div className="flex items-center gap-3">
                           <div className="w-2 h-2 rounded-full bg-green-500" />
                           <div><div className="font-medium text-sm">{r.reservation_number || `Res #${r.id}`}</div><div className="text-xs text-gray-500">{r.event_name || r.facility_name} — Reservation</div></div>
@@ -381,7 +379,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
                       </div>
                     ))}
                     {requests.filter(r => r.status === 'submitted').slice(0, 5).map(r => (
-                      <div key={`rq-${r.id}`} className="p-3 flex items-center justify-between hover:bg-gray-50 cursor-pointer" onClick={() => { setActiveTab('requests'); loadRequestDetail(r); }}>
+                      <div key={`rq-${r.id}`} className="p-3 flex items-center justify-between hover:bg-gray-50 cursor-pointer" onClick={() => { setActiveTab('requests'); loadModuleDetail('request',r); }}>
                         <div className="flex items-center gap-3">
                           <div className="w-2 h-2 rounded-full bg-yellow-500" />
                           <div><div className="font-medium text-sm">{r.request_number || `Request #${r.id}`}</div><div className="text-xs text-gray-500">{r.category} — Request</div></div>
@@ -389,7 +387,16 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
                         <StatusBadge status="submitted" />
                       </div>
                     ))}
-                    {(pendingCount + pendingLicenses + pendingReservations + openRequests) === 0 && <div className="p-6 text-center text-gray-400 text-sm">All caught up!</div>}
+                    {formSubmissions.filter(f => f.status === 'received').slice(0, 5).map(f => (
+                      <div key={`f-${f.id}`} className="p-3 flex items-center justify-between hover:bg-gray-50 cursor-pointer" onClick={() => { setActiveTab('forms'); setSelectedForm(f); }}>
+                        <div className="flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full bg-indigo-500" />
+                          <div><div className="font-medium text-sm">{f.submission_number}</div><div className="text-xs text-gray-500">{f.form_name||f.form_type} — Form</div></div>
+                        </div>
+                        <StatusBadge status="received" />
+                      </div>
+                    ))}
+                    {(pendingCount + pendingLicenses + pendingReservations + openRequests + pendingForms) === 0 && <div className="p-6 text-center text-gray-400 text-sm">All caught up!</div>}
                   </div>
                 </div>
                 <div className="space-y-5">
@@ -420,20 +427,12 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
                 <div className="bg-white rounded-xl shadow-sm border">
                   <div className="p-4 border-b"><h3 className="font-bold text-sm flex items-center gap-2"><Icon name="activity" size={15} className="text-sky-600" /> Recent Activity</h3></div>
                   <div className="divide-y max-h-64 overflow-auto">
-                    {activityFeed.slice(0, 10).map(a => (
+                    {activityFeed.slice(0,10).map(a => { const ap=a.action?.includes('approved'),dn=a.action?.includes('denied'),py=a.action?.includes('Payment'); return (
                       <div key={a.id} className="px-4 py-2.5 flex items-start gap-3">
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${a.action?.includes('approved')?'bg-emerald-100':a.action?.includes('denied')?'bg-red-100':a.action?.includes('Payment')?'bg-emerald-100':'bg-sky-100'}`}>
-                          <Icon name={a.action?.includes('approved')?'check':a.action?.includes('denied')?'x':a.action?.includes('Payment')?'dollar-sign':'file-text'} size={13}
-                            className={a.action?.includes('approved')?'text-emerald-600':a.action?.includes('denied')?'text-red-600':a.action?.includes('Payment')?'text-emerald-600':'text-sky-600'} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-semibold text-gray-900">{a.action}</div>
-                          <div className="text-[10px] text-gray-500">{a.permit_number||''}{a.details?` — ${a.details}`:''}</div>
-                          <div className="text-[10px] text-gray-400">{a.created_at?.replace('T',' ').split('.')[0]}</div>
-                        </div>
-                      </div>
-                    ))}
-                    {activityFeed.length === 0 && <div className="p-6 text-center text-sm text-gray-400">No recent activity</div>}
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${ap?'bg-emerald-100':dn?'bg-red-100':py?'bg-emerald-100':'bg-sky-100'}`}><Icon name={ap?'check':dn?'x':py?'dollar-sign':'file-text'} size={13} className={ap?'text-emerald-600':dn?'text-red-600':py?'text-emerald-600':'text-sky-600'} /></div>
+                        <div className="flex-1 min-w-0"><div className="text-xs font-semibold text-gray-900">{a.action}</div><div className="text-[10px] text-gray-500">{a.permit_number||''}{a.details?` — ${a.details}`:''}</div><div className="text-[10px] text-gray-400">{a.created_at?.replace('T',' ').split('.')[0]}</div></div>
+                      </div>); })}
+                    {activityFeed.length===0 && <div className="p-6 text-center text-sm text-gray-400">No recent activity</div>}
                   </div>
                 </div>
                 <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
@@ -695,7 +694,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
 
           {/* ===== BUSINESS LICENSES ===== */}
           {activeTab === 'licenses' && (
-            <ModulePanel items={licenses} selected={selectedLicense} onSelect={loadLicenseDetail} onClose={() => { setSelectedLicense(null); setLicenseDetail(null); }} loading={moduleLoading && activeTab === 'licenses'}
+            <ModulePanel items={licenses} selected={selectedLicense} onSelect={l => loadModuleDetail('license',l)} onClose={() => { setSelectedLicense(null); setLicenseDetail(null); }} loading={moduleLoading && activeTab === 'licenses'}
               filterFn={(item, q) => (item.business_name||'').toLowerCase().includes(q) || (item.license_number||'').toLowerCase().includes(q)}
               columns={[
                 { key:'license_number', label:'License #', render: l => <div><div className="font-semibold text-sm text-sky-700">{l.license_number||`#${l.id}`}</div><div className="text-[10px] text-gray-400">{l.license_type||l.type}</div></div> },
@@ -743,7 +742,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
 
           {/* ===== PARK RESERVATIONS ===== */}
           {activeTab === 'parks' && (
-            <ModulePanel items={reservations} selected={selectedReservation} onSelect={loadReservationDetail} onClose={() => { setSelectedReservation(null); setReservationDetail(null); }} loading={moduleLoading && activeTab === 'parks'}
+            <ModulePanel items={reservations} selected={selectedReservation} onSelect={r => loadModuleDetail('reservation',r)} onClose={() => { setSelectedReservation(null); setReservationDetail(null); }} loading={moduleLoading && activeTab === 'parks'}
               filterFn={(item, q) => (item.event_name||'').toLowerCase().includes(q) || (item.facility_name||'').toLowerCase().includes(q) || (item.reservation_number||'').toLowerCase().includes(q)}
               columns={[
                 { key:'reservation_number', label:'Res #', render: r => <div className="font-semibold text-sm text-sky-700">{r.reservation_number||`#${r.id}`}</div> },
@@ -777,7 +776,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
 
           {/* ===== CITIZEN REQUESTS ===== */}
           {activeTab === 'requests' && (
-            <ModulePanel items={requests} selected={selectedRequest} onSelect={loadRequestDetail} onClose={() => { setSelectedRequest(null); setRequestDetail(null); }} loading={moduleLoading && activeTab === 'requests'}
+            <ModulePanel items={requests} selected={selectedRequest} onSelect={r => loadModuleDetail('request',r)} onClose={() => { setSelectedRequest(null); setRequestDetail(null); }} loading={moduleLoading && activeTab === 'requests'}
               filterFn={(item, q) => (item.category||'').toLowerCase().includes(q) || (item.location||'').toLowerCase().includes(q) || (item.request_number||'').toLowerCase().includes(q) || (item.description||'').toLowerCase().includes(q)}
               columns={[
                 { key:'request_number', label:'Request #', render: r => <div className="font-semibold text-sm text-sky-700">{r.request_number||`#${r.id}`}</div> },
@@ -820,6 +819,46 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
             />
           )}
 
+          {/* ===== FORM SUBMISSIONS ===== */}
+          {activeTab === 'forms' && (
+            <ModulePanel items={formSubmissions} selected={selectedForm} onSelect={f => { setSelectedForm(f); setModuleComment(''); }} onClose={() => setSelectedForm(null)} loading={moduleLoading && activeTab === 'forms'}
+              filterFn={(item, q) => (item.form_name||'').toLowerCase().includes(q) || (item.submission_number||'').toLowerCase().includes(q) || JSON.stringify(item.data||{}).toLowerCase().includes(q)}
+              columns={[
+                { key:'submission_number', label:'Tracking #', render: r => <div className="font-semibold text-sm text-sky-700">{r.submission_number}</div> },
+                { key:'form_name', label:'Form Type', render: r => <span className="text-gray-700 truncate max-w-[200px] block">{r.form_name||r.form_type}</span> },
+                { key:'submitted_at', label:'Submitted', render: r => <span className="text-xs text-gray-500">{r.submitted_at?.split('T')[0]||'--'}</span> },
+                { key:'status', label:'Status', render: r => <StatusBadge status={r.status} /> },
+              ]}
+              renderDetail={(form) => {
+                const d = typeof form.data === 'string' ? JSON.parse(form.data || '{}') : (form.data || {});
+                const doFormAction = async (status, msg) => { if (demoMode) { toast('Demo mode','warning'); return; } setUpdating(true); try { await api.updateForm(form.id, { status, staff_notes: moduleComment||form.staff_notes }); setFormSubmissions(await api.getForms()); setSelectedForm(null); toast(msg); } catch(e) { toast(e.message,'error'); } setUpdating(false); };
+                return (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <Field label="Tracking #">{form.submission_number}</Field>
+                      <Field label="Form Type">{form.form_name||form.form_type}</Field>
+                      <Field label="Submitted">{form.submitted_at?.replace('T',' ').split('.')[0]||'--'}</Field>
+                      <Field label="Status"><StatusBadge status={form.status} /></Field>
+                      {form.reviewed_at && <Field label="Reviewed">{form.reviewed_at?.split('T')[0]}</Field>}
+                    </div>
+                    <div className="border-t pt-3"><div className="text-[10px] text-gray-400 uppercase font-semibold mb-2">Submitted Data</div>
+                      <div className="bg-gray-50 rounded-lg p-3 space-y-1.5">
+                        {Object.entries(d).filter(([,v]) => v).map(([k,v]) => (<div key={k} className="flex gap-2"><span className="text-xs text-gray-500 font-medium min-w-[120px] capitalize">{k.replace(/_/g,' ')}:</span><span className="text-xs text-gray-800">{String(v)}</span></div>))}
+                        {Object.keys(d).length === 0 && <p className="text-xs text-gray-400">No data</p>}
+                      </div>
+                    </div>
+                    {form.staff_notes && <div className="bg-amber-50 p-3 rounded-lg"><div className="text-[10px] text-amber-600 uppercase font-semibold mb-1">Staff Notes</div><div className="text-sm text-amber-800">{form.staff_notes}</div></div>}
+                    <div className="pt-3 border-t space-y-2"><textarea value={moduleComment} onChange={e => setModuleComment(e.target.value)} placeholder="Staff notes..." rows={2} className={inp} /></div>
+                    <div className="flex gap-2 flex-wrap">
+                      {form.status === 'received' && <><ActBtn onClick={() => doFormAction('reviewed','Form marked as reviewed')} color="emerald" icon="check" label="Mark Reviewed" /><ActBtn onClick={() => doFormAction('approved','Form approved')} color="sky" icon="check-circle" label="Approve" /></>}
+                      {(form.status === 'received' || form.status === 'reviewed') && <ActBtn onClick={() => doFormAction('denied','Form denied')} color="red" icon="x" label="Deny" />}
+                      {moduleComment.trim() && form.status !== 'received' && <button onClick={async () => { if (demoMode) { toast('Demo mode','warning'); return; } try { await api.updateForm(form.id, { staff_notes: moduleComment }); toast('Notes saved'); } catch(e) { toast(e.message,'error'); } }} className="bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-700">Save Notes</button>}
+                    </div>
+                  </div>);
+              }}
+            />
+          )}
+
           {/* ===== CALENDAR ===== */}
           {activeTab === 'calendar' && (
             <div className="space-y-5">
@@ -854,9 +893,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
                   })}
                 </div>
                 <div className="p-3 bg-gray-50 rounded-b-xl flex items-center gap-4 flex-wrap">
-                  {[{l:'Inspection',c:'bg-blue-100'},{l:'Hearing',c:'bg-purple-100'},{l:'Reservation',c:'bg-violet-100'},{l:'Deadline',c:'bg-amber-100'},{l:'Renewal/Expiry',c:'bg-red-100'}].map(x => (
-                    <div key={x.l} className="flex items-center gap-1.5"><span className={`w-3 h-2 rounded-sm ${x.c}`} /><span className="text-[10px] text-gray-500 font-medium">{x.l}</span></div>
-                  ))}
+                  {[['Inspection','bg-blue-100'],['Hearing','bg-purple-100'],['Reservation','bg-violet-100'],['Deadline','bg-amber-100'],['Renewal/Expiry','bg-red-100']].map(([l,c]) => (<div key={l} className="flex items-center gap-1.5"><span className={`w-3 h-2 rounded-sm ${c}`}/><span className="text-[10px] text-gray-500 font-medium">{l}</span></div>))}
                 </div>
               </div>
               <div className="grid lg:grid-cols-2 gap-5">
@@ -943,27 +980,14 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
               <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-bold text-emerald-800 flex items-center gap-2 text-sm"><Icon name="check-circle" size={18} className="text-emerald-600" /> Council Meeting Summary</h3>
-                  <button onClick={() => {
-                    const w = window.open('','_blank');
-                    w.document.write(`<!DOCTYPE html><html><head><title>Council Report</title><style>body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;color:#333;font-size:13px}h1{font-size:18px;margin:0 0 4px}h2{font-size:14px;color:#0369a1;margin:20px 0 8px;border-bottom:1px solid #e5e7eb;padding-bottom:4px}.stats{display:flex;gap:16px;margin:16px 0}.stat{flex:1;text-align:center;background:#f9fafb;border-radius:8px;padding:12px}.stat .num{font-size:24px;font-weight:800}.stat .lbl{font-size:10px;color:#888;text-transform:uppercase}table{width:100%;border-collapse:collapse;margin:12px 0}td,th{border:1px solid #e5e7eb;padding:6px 10px;text-align:left;font-size:11px}th{background:#f9fafb;font-weight:600}@media print{body{margin:20px}}</style></head><body>
-                      <h1>Town of Three Forks — City Management Report</h1><div style="font-size:12px;color:#666">Prepared ${new Date().toLocaleDateString()} for City Council</div>
-                      <div class="stats"><div class="stat"><div class="num">${stats?.total||permits.length}</div><div class="lbl">Permits</div></div><div class="stat"><div class="num">${licenses.filter(l=>l.status==='active').length}</div><div class="lbl">Active Licenses</div></div><div class="stat"><div class="num" style="color:#16a34a">${stats?.approved||0}</div><div class="lbl">Approved</div></div><div class="stat"><div class="num">$${((stats?.total_valuation||0)/1e6).toFixed(2)}M</div><div class="lbl">Investment</div></div><div class="stat"><div class="num">$${(stats?.fees_collected||0).toLocaleString()}</div><div class="lbl">Collected</div></div></div>
-                      <h2>All Permits</h2><table><tr><th>Permit #</th><th>Type</th><th>Address</th><th>Applicant</th><th>Status</th><th>Submitted</th><th>Value</th><th>Fee</th></tr>
-                      ${permits.map(p=>`<tr><td>${p.id}</td><td>${p.type}</td><td>${p.address}</td><td>${p.applicant}</td><td>${p.status}</td><td>${p.submitted}</td><td>$${(p.valuation||0).toLocaleString()}</td><td>$${p.fees||0}</td></tr>`).join('')}</table>
-                      ${(stats?.by_type||[]).length?`<h2>By Type</h2><table><tr><th>Type</th><th>Count</th><th>Value</th></tr>${(stats.by_type||[]).map(t=>`<tr><td>${t.name}</td><td>${t.count}</td><td>$${(t.value||0).toLocaleString()}</td></tr>`).join('')}</table>`:''}
-                      <div style="margin-top:40px;border-top:1px solid #e5e7eb;padding-top:12px;font-size:10px;color:#888;text-align:center">Town of Three Forks &bull; 206 Main Street &bull; Three Forks, MT 59752</div>
-                    </body></html>`);
-                    w.document.close(); w.print();
-                  }} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700">
+                  <button onClick={() => { const w=window.open('','_blank'); const css='body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;color:#333;font-size:13px}h1{font-size:18px;margin:0 0 4px}h2{font-size:14px;color:#0369a1;margin:20px 0 8px;border-bottom:1px solid #e5e7eb;padding-bottom:4px}.stats{display:flex;gap:16px;margin:16px 0}.stat{flex:1;text-align:center;background:#f9fafb;border-radius:8px;padding:12px}.stat .num{font-size:24px;font-weight:800}.stat .lbl{font-size:10px;color:#888;text-transform:uppercase}table{width:100%;border-collapse:collapse;margin:12px 0}td,th{border:1px solid #e5e7eb;padding:6px 10px;text-align:left;font-size:11px}th{background:#f9fafb;font-weight:600}@media print{body{margin:20px}}'; const al=licenses.filter(l=>l.status==='active').length,tv=((stats?.total_valuation||0)/1e6).toFixed(2),fc=(stats?.fees_collected||0).toLocaleString(); w.document.write(`<!DOCTYPE html><html><head><title>Council Report</title><style>${css}</style></head><body><h1>Town of Three Forks — City Management Report</h1><div style="font-size:12px;color:#666">Prepared ${new Date().toLocaleDateString()} for City Council</div><div class="stats"><div class="stat"><div class="num">${stats?.total||permits.length}</div><div class="lbl">Permits</div></div><div class="stat"><div class="num">${al}</div><div class="lbl">Active Licenses</div></div><div class="stat"><div class="num" style="color:#16a34a">${stats?.approved||0}</div><div class="lbl">Approved</div></div><div class="stat"><div class="num">$${tv}M</div><div class="lbl">Investment</div></div><div class="stat"><div class="num">$${fc}</div><div class="lbl">Collected</div></div></div><h2>All Permits</h2><table><tr><th>Permit #</th><th>Type</th><th>Address</th><th>Applicant</th><th>Status</th><th>Submitted</th><th>Value</th><th>Fee</th></tr>${permits.map(p=>`<tr><td>${p.id}</td><td>${p.type}</td><td>${p.address}</td><td>${p.applicant}</td><td>${p.status}</td><td>${p.submitted}</td><td>$${(p.valuation||0).toLocaleString()}</td><td>$${p.fees||0}</td></tr>`).join('')}</table>${(stats?.by_type||[]).length?`<h2>By Type</h2><table><tr><th>Type</th><th>Count</th><th>Value</th></tr>${(stats.by_type||[]).map(t=>`<tr><td>${t.name}</td><td>${t.count}</td><td>$${(t.value||0).toLocaleString()}</td></tr>`).join('')}</table>`:''}<div style="margin-top:40px;border-top:1px solid #e5e7eb;padding-top:12px;font-size:10px;color:#888;text-align:center">Town of Three Forks &bull; 206 Main Street &bull; Three Forks, MT 59752</div></body></html>`); w.document.close(); w.print(); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700">
                     <Icon name="printer" size={13} /> Print Report
                   </button>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-center">
-                  <div className="bg-white rounded-lg p-3"><div className="text-xl font-extrabold text-gray-900">{stats?.total||permits.length}</div><div className="text-[10px] text-gray-500">Total Permits</div></div>
-                  <div className="bg-white rounded-lg p-3"><div className="text-xl font-extrabold text-gray-900">{licenses.filter(l=>l.status==='active').length}</div><div className="text-[10px] text-gray-500">Active Licenses</div></div>
-                  <div className="bg-white rounded-lg p-3"><div className="text-xl font-extrabold text-emerald-600">{stats?.approved||0}</div><div className="text-[10px] text-gray-500">Approved</div></div>
-                  <div className="bg-white rounded-lg p-3"><div className="text-xl font-extrabold text-gray-900">${((stats?.total_valuation||0)/1e6).toFixed(2)}M</div><div className="text-[10px] text-gray-500">Investment</div></div>
-                  <div className="bg-white rounded-lg p-3"><div className="text-xl font-extrabold text-gray-900">${(stats?.fees_collected||0).toLocaleString()}</div><div className="text-[10px] text-gray-500">Collected</div></div>
+                  {[{v:stats?.total||permits.length,l:'Total Permits'},{v:licenses.filter(l=>l.status==='active').length,l:'Active Licenses'},{v:stats?.approved||0,l:'Approved',c:'text-emerald-600'},{v:`$${((stats?.total_valuation||0)/1e6).toFixed(2)}M`,l:'Investment'},{v:`$${(stats?.fees_collected||0).toLocaleString()}`,l:'Collected'}].map((s,i) => (
+                    <div key={i} className="bg-white rounded-lg p-3"><div className={`text-xl font-extrabold ${s.c||'text-gray-900'}`}>{s.v}</div><div className="text-[10px] text-gray-500">{s.l}</div></div>
+                  ))}
                 </div>
               </div>
             </div>
