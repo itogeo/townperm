@@ -2,7 +2,7 @@
 // PARK RESERVATIONS MODULE
 // ==========================================================================
 
-import { json, getUser, logActivity, queueEmail, nextNumber, requireAuth, parseBody, sanitize, VALID_STATUSES } from './helpers.js';
+import { json, getUser, logActivity, queueEmail, nextNumber, requireAuth, parseBody, sanitize, validateInput, checkRateLimit, VALID_STATUSES } from './helpers.js';
 
 export async function handleParks(method, path, url, request, db) {
 
@@ -36,9 +36,12 @@ export async function handleParks(method, path, url, request, db) {
 
   // POST /parks/reservations — public
   if (method === 'POST' && path === '/parks/reservations') {
+    const rl = await checkRateLimit(db, request, '/parks', 5, 1); if (rl) return rl;
     const { data, error: bodyErr } = await parseBody(request);
     if (bodyErr) return bodyErr;
     if (!data.facility_id || !data.event_date || !data.contact_name) return json({ error: 'facility_id, event_date, and contact_name required' }, 400);
+    const valErr = validateInput(data, { contact_email: { email: true, label: 'Contact email' }, contact_phone: { phone: true, label: 'Phone' }, contact_name: { maxLen: 200, label: 'Contact name' }, event_name: { maxLen: 300, label: 'Event name' } });
+    if (valErr) return json({ error: valErr }, 400);
     const facility = await db.prepare('SELECT * FROM park_facilities WHERE id = ?').bind(data.facility_id).first();
     if (!facility) return json({ error: 'Invalid facility' }, 400);
 

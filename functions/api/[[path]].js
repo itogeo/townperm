@@ -3,7 +3,7 @@
 // Cloudflare Pages Functions catch-all for /api/* routes
 // ==========================================================================
 
-import { getCityConfig, json, getCookie, getUser, ensureDB, logActivity, requireAuth, parseBody, verifyPassword, VALID_STATUSES } from './lib/helpers.js';
+import { getCityConfig, json, getCookie, getUser, ensureDB, logActivity, requireAuth, parseBody, verifyPassword, checkRateLimit, VALID_STATUSES } from './lib/helpers.js';
 import { handlePermits } from './lib/permits.js';
 import { handleLicenses } from './lib/licenses.js';
 import { handleParks } from './lib/parks.js';
@@ -15,6 +15,10 @@ export async function onRequest(context) {
   const path = '/' + (params.path?.join('/') || '');
   const method = request.method;
   const db = env.DB;
+
+  if (method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '86400' } });
+  }
 
   try {
     await ensureDB(db);
@@ -30,6 +34,7 @@ export async function onRequest(context) {
     // AUTH
     // ==================================================================
     if (method === 'POST' && path === '/auth/login') {
+      const rl = await checkRateLimit(db, request, '/auth/login', 5, 1); if (rl) return rl;
       const data = await request.json();
       if (!data.password) return json({ error: 'Password required' }, 401);
       const user = await db.prepare('SELECT * FROM users WHERE email = ?').bind(data.email || '').first();
@@ -111,8 +116,10 @@ export async function onRequest(context) {
     // ==================================================================
     if (path.startsWith('/forms')) {
       if (method === 'POST' && path === '/forms') {
+        const rl = await checkRateLimit(db, request, '/forms', 10, 1); if (rl) return rl;
         const body = await request.json();
         if (!body.form_type || !body.data) return json({ error: 'form_type and data required' }, 400);
+        if (JSON.stringify(body.data).length > 50000) return json({ error: 'Form data too large' }, 400);
         const num = 'GF-' + Date.now().toString(36).toUpperCase();
         await db.prepare('INSERT INTO form_submissions (submission_number, form_type, form_name, data, submitted_at) VALUES (?, ?, ?, ?, datetime("now"))').bind(num, body.form_type, body.form_name || body.form_type, JSON.stringify(body.data)).run();
         return json({ submission_number: num, message: 'Form submitted successfully' }, 201);

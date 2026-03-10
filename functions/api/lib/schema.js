@@ -253,6 +253,11 @@ CREATE INDEX IF NOT EXISTS idx_requests_status ON citizen_requests(status);
 CREATE INDEX IF NOT EXISTS idx_requests_number ON citizen_requests(request_number);
 CREATE INDEX IF NOT EXISTS idx_parcels_parcel_id ON parcels(parcel_id);
 CREATE INDEX IF NOT EXISTS idx_email_queue_status ON email_queue(status);
+CREATE TABLE IF NOT EXISTS rate_limits (
+  ip TEXT NOT NULL, endpoint TEXT NOT NULL,
+  window_start TEXT NOT NULL, request_count INTEGER DEFAULT 1,
+  PRIMARY KEY (ip, endpoint, window_start)
+);
 `;
 
 // Migration SQL for existing DBs that only have the permits tables
@@ -332,5 +337,10 @@ CREATE TABLE IF NOT EXISTS form_submissions (
   status TEXT DEFAULT 'received', staff_notes TEXT,
   submitted_at TEXT DEFAULT (datetime('now')),
   reviewed_at TEXT, reviewed_by INTEGER REFERENCES users(id)
+);
+CREATE TABLE IF NOT EXISTS rate_limits (
+  ip TEXT NOT NULL, endpoint TEXT NOT NULL,
+  window_start TEXT NOT NULL, request_count INTEGER DEFAULT 1,
+  PRIMARY KEY (ip, endpoint, window_start)
 );
 `;

@@ -2,7 +2,7 @@
 // PERMITS MODULE — all permit-related API routes
 // ==========================================================================
 
-import { json, getUser, logActivity, queueEmail, nextNumber, requireAuth, parseBody, sanitize, VALID_STATUSES } from './helpers.js';
+import { json, getUser, logActivity, queueEmail, nextNumber, requireAuth, parseBody, sanitize, validateInput, checkRateLimit, VALID_STATUSES } from './helpers.js';
 
 export async function handlePermits(method, path, url, request, db) {
 
@@ -41,9 +41,12 @@ export async function handlePermits(method, path, url, request, db) {
 
   // POST /permits — public, no auth required (citizen submission)
   if (method === 'POST' && path === '/permits') {
+    const rl = await checkRateLimit(db, request, '/permits', 5, 1); if (rl) return rl;
     const { data, error: bodyErr } = await parseBody(request, 5 * 1024 * 1024); // 5MB for file uploads
     if (bodyErr) return bodyErr;
     if (!data.address && !data.parcel_id) return json({ error: 'Address or parcel ID required' }, 400);
+    const valErr = validateInput(data, { applicant_email: { email: true, label: 'Email' }, applicant_phone: { phone: true, label: 'Phone' }, applicant_name: { maxLen: 200, label: 'Applicant name' }, description: { maxLen: 5000, label: 'Description' }, address: { maxLen: 300, label: 'Address' } });
+    if (valErr) return json({ error: valErr }, 400);
     const permitType = await db.prepare('SELECT * FROM permit_types WHERE code = ?').bind(data.permit_type_code || 'ZP').first();
     if (!permitType) return json({ error: 'Invalid permit type' }, 400);
 

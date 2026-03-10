@@ -16,10 +16,12 @@ export function getCityConfig(env) {
   };
 }
 
+const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
+
 export function json(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff', ...extraHeaders },
+    headers: { 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff', ...CORS, ...extraHeaders },
   });
 }
 
@@ -57,6 +59,20 @@ export function sanitize(val, maxLen = 5000) {
   return val.trim().slice(0, maxLen);
 }
 
+// Input validation helpers
+export function validateEmail(e) { return !e || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
+export function validatePhone(p) { return !p || /^[\d\s\-\(\)\+\.]{7,20}$/.test(p); }
+export function validateInput(data, rules) {
+  for (const [field, c] of Object.entries(rules)) {
+    const v = data[field];
+    if (c.required && (!v || !String(v).trim())) return `${c.label||field} is required`;
+    if (v && c.email && !validateEmail(v)) return `Invalid email for ${c.label||field}`;
+    if (v && c.phone && !validatePhone(v)) return `Invalid phone for ${c.label||field}`;
+    if (v && c.maxLen && String(v).length > c.maxLen) return `${c.label||field} too long (max ${c.maxLen} chars)`;
+  }
+  return null;
+}
+
 // Password hashing via Web Crypto API (PBKDF2, available in Cloudflare Workers)
 export async function hashPassword(password) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
@@ -78,6 +94,19 @@ export async function verifyPassword(password, storedHash) {
   const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' }, key, 256);
   const derived = [...new Uint8Array(bits)].map(b => b.toString(16).padStart(2, '0')).join('');
   return derived === hashHex;
+}
+
+// D1-based rate limiting (CF Workers are stateless, no in-memory counters)
+export async function checkRateLimit(db, request, endpoint, maxReqs = 10, windowMin = 1) {
+  const ip = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+  const w = new Date(); w.setSeconds(0, 0); w.setMinutes(Math.floor(w.getMinutes() / windowMin) * windowMin);
+  const wk = w.toISOString().slice(0, 16);
+  try {
+    const row = await db.prepare('SELECT request_count FROM rate_limits WHERE ip = ? AND endpoint = ? AND window_start = ?').bind(ip, endpoint, wk).first();
+    if (row && row.request_count >= maxReqs) return json({ error: 'Too many requests. Please try again later.' }, 429);
+    await db.prepare('INSERT INTO rate_limits (ip, endpoint, window_start, request_count) VALUES (?, ?, ?, 1) ON CONFLICT(ip, endpoint, window_start) DO UPDATE SET request_count = request_count + 1').bind(ip, endpoint, wk).run();
+  } catch {}
+  return null;
 }
 
 export function getCookie(request, name) {
@@ -242,6 +271,7 @@ export async function ensureDB(db) {
   for (const sql of newTypes) { try { await db.exec(sql); } catch {} }
   // Clean up expired sessions (fire and forget)
   db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')").run().catch(() => {});
+  db.prepare("DELETE FROM rate_limits WHERE window_start < datetime('now', '-1 hour')").run().catch(() => {});
   _dbReady = true;
 }
 

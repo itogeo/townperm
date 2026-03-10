@@ -2,7 +2,7 @@
 // BUSINESS LICENSES MODULE
 // ==========================================================================
 
-import { json, getUser, logActivity, queueEmail, nextNumber, requireAuth, parseBody, sanitize, VALID_STATUSES } from './helpers.js';
+import { json, getUser, logActivity, queueEmail, nextNumber, requireAuth, parseBody, sanitize, validateInput, checkRateLimit, VALID_STATUSES } from './helpers.js';
 
 export async function handleLicenses(method, path, url, request, db) {
 
@@ -29,9 +29,12 @@ export async function handleLicenses(method, path, url, request, db) {
 
   // POST /licenses — public
   if (method === 'POST' && path === '/licenses') {
+    const rl = await checkRateLimit(db, request, '/licenses', 5, 1); if (rl) return rl;
     const { data, error: bodyErr } = await parseBody(request);
     if (bodyErr) return bodyErr;
     if (!data.business_name?.trim()) return json({ error: 'Business name required' }, 400);
+    const valErr = validateInput(data, { owner_email: { email: true, label: 'Owner email' }, owner_phone: { phone: true, label: 'Phone' }, business_name: { maxLen: 300, label: 'Business name' } });
+    if (valErr) return json({ error: valErr }, 400);
     const licType = await db.prepare('SELECT * FROM license_types WHERE id = ? OR code = ?')
       .bind(data.license_type_id || 0, data.license_type_code || '').first();
     if (!licType) return json({ error: 'Invalid license type' }, 400);

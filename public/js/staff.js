@@ -63,7 +63,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
   ];
 
   useEffect(() => { if (demoMode) return; if (activeTab === 'licenses' && !licenses.length) { setModuleLoading(true); api.getLicenses().then(setLicenses).catch(() => toast('Failed to load licenses', 'error')).finally(() => setModuleLoading(false)); } if (activeTab === 'parks' && !reservations.length) { setModuleLoading(true); api.getReservations().then(setReservations).catch(() => toast('Failed to load reservations', 'error')).finally(() => setModuleLoading(false)); } if (activeTab === 'requests' && !requests.length) { setModuleLoading(true); api.getRequests().then(setRequests).catch(() => toast('Failed to load requests', 'error')).finally(() => setModuleLoading(false)); } if (activeTab === 'forms' && !formSubmissions.length) { setModuleLoading(true); api.getForms().then(setFormSubmissions).catch(() => toast('Failed to load form submissions', 'error')).finally(() => setModuleLoading(false)); } }, [activeTab, demoMode]);
-  useEffect(() => { if (demoMode) return; api.getLicenses().then(setLicenses).catch(() => {}); api.getReservations().then(setReservations).catch(() => {}); api.getRequests().then(setRequests).catch(() => {}); api.getForms().then(setFormSubmissions).catch(() => {}); api.getCalendar().then(setCalendarEvents).catch(() => {}); api.getActivity(30).then(setActivityFeed).catch(() => {}); }, [demoMode]);
+  useEffect(() => { if (demoMode) return; const ce = e => toast(e.message||'Load error','error'); api.getLicenses().then(setLicenses).catch(ce); api.getReservations().then(setReservations).catch(ce); api.getRequests().then(setRequests).catch(ce); api.getForms().then(setFormSubmissions).catch(ce); api.getCalendar().then(setCalendarEvents).catch(ce); api.getActivity(30).then(setActivityFeed).catch(ce); }, [demoMode]);
 
   const notifications = useMemo(() => { const items = [], today = new Date().toISOString().split('T')[0];
     calendarEvents.filter(e => e.date < today && e.status !== 'completed' && e.type !== 'inspection').forEach(e => items.push({ type:'overdue', icon:'alert-triangle', color:'red', title:`Overdue: ${e.title}`, sub:`Due ${e.date}`, id:`dl-${e.id}` }));
@@ -130,7 +130,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
       await api.addInspection(selectedPermit.dbId, { inspection_type: newInspType, scheduled_date: newInspDate });
       setNewInspType(''); setNewInspDate('');
       setPermitDetail(await api.getPermitDetail(selectedPermit.dbId));
-      api.getCalendar().then(setCalendarEvents).catch(() => {});
+      api.getCalendar().then(setCalendarEvents).catch(e => toast(e.message||'Calendar error','error'));
       toast('Inspection scheduled');
     } catch (err) { toast(err.message, 'error'); }
   };
@@ -177,15 +177,11 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
     w.document.close(); w.print();
   }, []);
 
-  const exportCSV = () => {
-    const h = ['Permit #','Type','Address','Applicant','Status','Submitted','Valuation','Fees Due','Fees Paid'];
-    const rows = permits.map(p => [p.id,p.type,p.address,p.applicant,p.status,p.submitted,p.valuation,p.fees||'',p.fees_paid||'']);
-    const csv = [h,...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = `permits_${new Date().toISOString().split('T')[0]}.csv`; a.click();
-    toast('CSV exported');
-  };
+  const exportCSV = () => exportModuleCSV('permits', ['Permit #','Type','Address','Applicant','Status','Submitted','Valuation','Fees Due','Fees Paid'], permits, p => [p.id,p.type,p.address,p.applicant,p.status,p.submitted,p.valuation,p.fees||'',p.fees_paid||''], toast);
+  const exportLicensesCSV = () => exportModuleCSV('licenses', ['License #','Business','Owner','Status','Issued','Expires','Fee'], licenses, l => [l.license_number||'',l.business_name||'',l.owner_name||'',l.status,l.issued_at||'',l.expiration_date||'',l.annual_fee||''], toast);
+  const exportParksCSV = () => exportModuleCSV('reservations', ['Res #','Event','Facility','Date','Contact','Status','Fee'], reservations, r => [r.reservation_number||'',r.event_name||'',r.facility_name||'',r.event_date||'',r.contact_name||'',r.status,r.total_fee||r.fee||''], toast);
+  const exportRequestsCSV = () => exportModuleCSV('requests', ['Request #','Category','Location','Reporter','Status','Priority','Submitted'], requests, r => [r.request_number||'',r.category||'',r.location||'',r.reporter_name||'',r.status,r.priority||'normal',r.created_at||''], toast);
+  const exportFormsCSV = () => exportModuleCSV('form_submissions', ['Tracking #','Form Type','Status','Submitted','Reviewed'], formSubmissions, f => [f.submission_number||'',f.form_name||f.form_type||'',f.status,f.submitted_at||'',f.reviewed_at||''], toast);
 
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const inp = "w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 outline-none";
@@ -196,7 +192,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
   );
 
   // Generic module table + detail panel
-  const ModulePanel = ({ items, selected, onSelect, onClose, columns, renderDetail, filterFn, loading }) => {
+  const ModulePanel = ({ items, selected, onSelect, onClose, columns, renderDetail, filterFn, loading, onExport }) => {
     if (loading) return <div className="flex items-center justify-center h-64"><div className="text-center"><div className="animate-spin w-8 h-8 border-2 border-sky-500 border-t-transparent rounded-full mx-auto mb-3"></div><p className="text-sm text-gray-500">Loading...</p></div></div>;
     const q = moduleSearch.toLowerCase();
     const filtered = items.filter(item => {
@@ -213,6 +209,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
                 <input type="text" placeholder="Search..." value={moduleSearch} onChange={e => setModuleSearch(e.target.value)} className="pl-9 pr-3 py-2 border rounded-lg text-sm w-full focus:ring-2 focus:ring-sky-500 outline-none" />
               </div>
               <span className="text-xs text-gray-400">{filtered.length} items</span>
+              {onExport && <button onClick={onExport} className="text-gray-400 hover:text-gray-600 p-1.5 hover:bg-gray-100 rounded-lg" title="Export CSV"><Icon name="download" size={15} /></button>}
             </div>
             <div className="max-h-[calc(100vh-240px)] overflow-auto">
               <table className="w-full">
@@ -694,7 +691,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
 
           {/* ===== BUSINESS LICENSES ===== */}
           {activeTab === 'licenses' && (
-            <ModulePanel items={licenses} selected={selectedLicense} onSelect={l => loadModuleDetail('license',l)} onClose={() => { setSelectedLicense(null); setLicenseDetail(null); }} loading={moduleLoading && activeTab === 'licenses'}
+            <ModulePanel items={licenses} selected={selectedLicense} onSelect={l => loadModuleDetail('license',l)} onClose={() => { setSelectedLicense(null); setLicenseDetail(null); }} loading={moduleLoading && activeTab === 'licenses'} onExport={exportLicensesCSV}
               filterFn={(item, q) => (item.business_name||'').toLowerCase().includes(q) || (item.license_number||'').toLowerCase().includes(q)}
               columns={[
                 { key:'license_number', label:'License #', render: l => <div><div className="font-semibold text-sm text-sky-700">{l.license_number||`#${l.id}`}</div><div className="text-[10px] text-gray-400">{l.license_type||l.type}</div></div> },
@@ -742,7 +739,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
 
           {/* ===== PARK RESERVATIONS ===== */}
           {activeTab === 'parks' && (
-            <ModulePanel items={reservations} selected={selectedReservation} onSelect={r => loadModuleDetail('reservation',r)} onClose={() => { setSelectedReservation(null); setReservationDetail(null); }} loading={moduleLoading && activeTab === 'parks'}
+            <ModulePanel items={reservations} selected={selectedReservation} onSelect={r => loadModuleDetail('reservation',r)} onClose={() => { setSelectedReservation(null); setReservationDetail(null); }} loading={moduleLoading && activeTab === 'parks'} onExport={exportParksCSV}
               filterFn={(item, q) => (item.event_name||'').toLowerCase().includes(q) || (item.facility_name||'').toLowerCase().includes(q) || (item.reservation_number||'').toLowerCase().includes(q)}
               columns={[
                 { key:'reservation_number', label:'Res #', render: r => <div className="font-semibold text-sm text-sky-700">{r.reservation_number||`#${r.id}`}</div> },
@@ -776,7 +773,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
 
           {/* ===== CITIZEN REQUESTS ===== */}
           {activeTab === 'requests' && (
-            <ModulePanel items={requests} selected={selectedRequest} onSelect={r => loadModuleDetail('request',r)} onClose={() => { setSelectedRequest(null); setRequestDetail(null); }} loading={moduleLoading && activeTab === 'requests'}
+            <ModulePanel items={requests} selected={selectedRequest} onSelect={r => loadModuleDetail('request',r)} onClose={() => { setSelectedRequest(null); setRequestDetail(null); }} loading={moduleLoading && activeTab === 'requests'} onExport={exportRequestsCSV}
               filterFn={(item, q) => (item.category||'').toLowerCase().includes(q) || (item.location||'').toLowerCase().includes(q) || (item.request_number||'').toLowerCase().includes(q) || (item.description||'').toLowerCase().includes(q)}
               columns={[
                 { key:'request_number', label:'Request #', render: r => <div className="font-semibold text-sm text-sky-700">{r.request_number||`#${r.id}`}</div> },
@@ -821,7 +818,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
 
           {/* ===== FORM SUBMISSIONS ===== */}
           {activeTab === 'forms' && (
-            <ModulePanel items={formSubmissions} selected={selectedForm} onSelect={f => { setSelectedForm(f); setModuleComment(''); }} onClose={() => setSelectedForm(null)} loading={moduleLoading && activeTab === 'forms'}
+            <ModulePanel items={formSubmissions} selected={selectedForm} onSelect={f => { setSelectedForm(f); setModuleComment(''); }} onClose={() => setSelectedForm(null)} loading={moduleLoading && activeTab === 'forms'} onExport={exportFormsCSV}
               filterFn={(item, q) => (item.form_name||'').toLowerCase().includes(q) || (item.submission_number||'').toLowerCase().includes(q) || JSON.stringify(item.data||{}).toLowerCase().includes(q)}
               columns={[
                 { key:'submission_number', label:'Tracking #', render: r => <div className="font-semibold text-sm text-sky-700">{r.submission_number}</div> },

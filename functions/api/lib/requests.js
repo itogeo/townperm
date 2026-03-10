@@ -2,7 +2,7 @@
 // CITIZEN REQUESTS MODULE — map-based issue reporting
 // ==========================================================================
 
-import { json, getUser, logActivity, queueEmail, nextNumber, requireAuth, parseBody, sanitize, VALID_STATUSES } from './helpers.js';
+import { json, getUser, logActivity, queueEmail, nextNumber, requireAuth, parseBody, sanitize, validateInput, checkRateLimit, VALID_STATUSES } from './helpers.js';
 
 export async function handleRequests(method, path, url, request, db) {
 
@@ -36,9 +36,12 @@ export async function handleRequests(method, path, url, request, db) {
 
   // POST /requests — public
   if (method === 'POST' && path === '/requests') {
+    const rl = await checkRateLimit(db, request, '/requests', 10, 1); if (rl) return rl;
     const { data, error: bodyErr } = await parseBody(request, 5 * 1024 * 1024);
     if (bodyErr) return bodyErr;
     if (!data.description?.trim()) return json({ error: 'Description required' }, 400);
+    const valErr = validateInput(data, { reporter_email: { email: true, label: 'Email' }, reporter_phone: { phone: true, label: 'Phone' }, description: { maxLen: 5000, label: 'Description' }, address: { maxLen: 300, label: 'Address' } });
+    if (valErr) return json({ error: valErr }, 400);
 
     const category = await db.prepare('SELECT * FROM request_categories WHERE id = ? OR code = ?')
       .bind(data.category_id || 0, data.category_code || '').first();

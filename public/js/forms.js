@@ -4,16 +4,16 @@
 const TF_URL = 'https://threeforksmontana.us/documents/650';
 const FORM_CATALOG = [
   { category: 'Zoning', icon: 'landmark', forms: [
-    { code: 'ZP-R', name: 'Zoning Permit — Residential', fee: 50, permit: true },
-    { code: 'ZP-C', name: 'Zoning Permit — Commercial', fee: 100, permit: true },
-    { code: 'ZP-A', name: 'Zoning Permit — Accessory', fee: 35, permit: true },
-    { code: 'CUP', name: 'Conditional Use Permit', fee: 350, permit: true },
-    { code: 'VAR', name: 'Variance Application', fee: 350, permit: true },
-    { code: 'ZCA', name: 'Zone Change / Amend Zoning Code', fee: 0, permit: true, pdf: `${TF_URL}/Zone_Change_Amendment_Application.pdf` },
+    { code: 'ZP-R', name: 'Zoning Permit — Residential', fee: 200, permit: true },
+    { code: 'ZP-C', name: 'Zoning Permit — Commercial', fee: 200, permit: true },
+    { code: 'ZP-A', name: 'Zoning Permit — Accessory', fee: 250, permit: true },
+    { code: 'CUP', name: 'Conditional Use Permit', fee: 500, permit: true },
+    { code: 'VAR', name: 'Variance Application', fee: 500, permit: true },
+    { code: 'ZCA', name: 'Zone Change / Amend Zoning Code', fee: 350, permit: true, pdf: `${TF_URL}/Zone_Change_Amendment_Application.pdf` },
   ]},
   { category: 'Floodplain', icon: 'waves', forms: [
-    { code: 'FP', name: 'Flood Permit', fee: 0, permit: true, pdf: `${TF_URL}/flood_permit_Three_Forks.pdf` },
-    { code: 'FPV', name: 'Floodplain Variance Application', fee: 0, permit: true, pdf: `${TF_URL}/Floodplain_Variance_Application.pdf` },
+    { code: 'FP', name: 'Flood Permit', fee: 500, permit: true, pdf: `${TF_URL}/flood_permit_Three_Forks.pdf` },
+    { code: 'FPV', name: 'Floodplain Variance Application', fee: 350, permit: true, pdf: `${TF_URL}/Floodplain_Variance_Application.pdf` },
   ]},
   { category: 'Water & Sewer', icon: 'droplet', forms: [
     { code: 'WSC', name: 'New Water/Sewer Connection', fee: 250, permit: true },
@@ -53,14 +53,14 @@ const FORM_CATALOG = [
         ['Ever Terminated or Suspended? Describe','termination_history','textarea']] },
   ]},
   { category: 'Subdivision', icon: 'grid-3x3', forms: [
-    { code: 'PPL', name: 'Preliminary Plat Application', fee: 0, permit: true, pdf: `${TF_URL}/Preliminary_Plat_Application.pdf` },
-    { code: 'FPL', name: 'Final Plat Application', fee: 0, permit: true, pdf: `${TF_URL}/Final_Plat_Application.pdf` },
-    { code: 'SUB', name: 'Exemption from Subdivision Review', fee: 0, permit: true, pdf: `${TF_URL}/Exemption_from_Subdivision_Review_Application.pdf` },
+    { code: 'PPL', name: 'Preliminary Plat Application', fee: 500, permit: true, pdf: `${TF_URL}/Preliminary_Plat_Application.pdf` },
+    { code: 'FPL', name: 'Final Plat Application', fee: 300, permit: true, pdf: `${TF_URL}/Final_Plat_Application.pdf` },
+    { code: 'SUB', name: 'Exemption from Subdivision Review', fee: 500, permit: true, pdf: `${TF_URL}/Exemption_from_Subdivision_Review_Application.pdf` },
     { code: 'SIA', name: 'Subdivision Improvements Agreement', fee: 0, pdfOnly: true, pdf: `${TF_URL}/Subdivision_Improvements_Agreement_or_Guaranty.pdf` },
   ]},
   { category: 'Annexation & Vacation', icon: 'map', forms: [
-    { code: 'ANX', name: 'Annexation Application', fee: 0, permit: true, pdf: `${TF_URL}/Annexation_Application.pdf` },
-    { code: 'VAC', name: 'Petition to Vacate / Abandon', fee: 0, permit: true, pdf: `${TF_URL}/Petition_to_Abandon_form_v1.pdf` },
+    { code: 'ANX', name: 'Annexation Application', fee: 500, permit: true, pdf: `${TF_URL}/Annexation_Application.pdf` },
+    { code: 'VAC', name: 'Petition to Vacate / Abandon', fee: 250, permit: true, pdf: `${TF_URL}/Petition_to_Abandon_form_v1.pdf` },
   ]},
   { category: 'Reference Documents', icon: 'book-open', forms: [
     { code: 'FEE', name: 'Fee Schedule', pdfOnly: true, pdf: `${TF_URL}/Fee_Schedule_Exhibit_for_Res.__465-2026_1.pdf` },

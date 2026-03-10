@@ -128,6 +128,15 @@ function transformPermit(p) {
   };
 }
 
+function exportModuleCSV(filename, headers, items, rowMapper, toastFn) {
+  const rows = items.map(rowMapper);
+  const csv = [headers,...rows].map(r => r.map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`; a.click();
+  if (toastFn) toastFn('CSV exported');
+}
+
 function normalizeConfig(cfg) {
   return {
     mapboxToken: cfg.mapbox_token || cfg.mapboxToken || DEFAULT_CONFIG.mapboxToken,
