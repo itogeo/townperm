@@ -98,6 +98,7 @@ const api = {
   updateRequest: (id, data) => api.request(`/api/requests/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   getRequestCategories: () => api.request('/api/request-categories'),
   getRequestsMap: () => api.request('/api/requests/map'),
+  lookupApplication: (number, email) => api.request(`/api/lookup?number=${encodeURIComponent(number)}${email ? '&email=' + encodeURIComponent(email) : ''}`),
 };
 
 function transformPermit(p) {

@@ -107,6 +107,48 @@ export async function onRequest(context) {
     }
 
     // ==================================================================
+    // PUBLIC LOOKUP — check application status by tracking number
+    // ==================================================================
+    if (method === 'GET' && path === '/lookup') {
+      const number = (url.searchParams.get('number') || '').trim().toUpperCase();
+      const email = (url.searchParams.get('email') || '').trim().toLowerCase();
+      if (!number) return json({ error: 'Tracking number required' }, 400);
+
+      let result = null, type = null;
+
+      // Detect type from prefix and search appropriate table
+      if (number.startsWith('ZP-') || number.startsWith('FP-') || number.startsWith('CUP-') || number.startsWith('VAR-') || number.startsWith('SUB-') || number.startsWith('WSC-')) {
+        const row = await db.prepare(`SELECT p.permit_number, p.status, p.address, p.applicant_name, p.applicant_email, p.submitted_at, p.decision_date, p.conditions, p.denial_reason, p.fees_calculated, p.fees_paid, pt.name as type_name FROM permits p JOIN permit_types pt ON p.permit_type_id = pt.id WHERE UPPER(p.permit_number) = ?`).bind(number).first();
+        if (row) { result = row; type = 'permit'; }
+      } else if (number.startsWith('BL-')) {
+        const row = await db.prepare(`SELECT bl.license_number, bl.status, bl.business_name, bl.owner_name, bl.owner_email, bl.created_at, bl.issued_date, bl.expiration_date, bl.annual_fee, bl.fees_paid, lt.name as type_name FROM business_licenses bl JOIN license_types lt ON bl.license_type_id = lt.id WHERE UPPER(bl.license_number) = ?`).bind(number).first();
+        if (row) { result = row; type = 'license'; }
+      } else if (number.startsWith('PR-')) {
+        const row = await db.prepare(`SELECT pr.reservation_number, pr.status, pr.event_name, pr.event_date, pr.start_time, pr.end_time, pr.contact_name, pr.contact_email, pr.total_fee, pr.fees_paid, pf.name as facility_name, pf.park_name FROM park_reservations pr JOIN park_facilities pf ON pr.facility_id = pf.id WHERE UPPER(pr.reservation_number) = ?`).bind(number).first();
+        if (row) { result = row; type = 'reservation'; }
+      } else if (number.startsWith('CR-')) {
+        const row = await db.prepare(`SELECT cr.request_number, cr.status, cr.address, cr.description, cr.reporter_name, cr.reporter_email, cr.created_at, cr.resolved_at, cr.resolution, rc.name as category_name FROM citizen_requests cr JOIN request_categories rc ON cr.category_id = rc.id WHERE UPPER(cr.request_number) = ?`).bind(number).first();
+        if (row) { result = row; type = 'request'; }
+      }
+
+      if (!result) return json({ error: 'No application found with that tracking number' }, 404);
+
+      // Verify email if provided (privacy check)
+      const storedEmail = result.applicant_email || result.owner_email || result.contact_email || result.reporter_email || '';
+      if (email && storedEmail.toLowerCase() !== email) return json({ error: 'Email does not match our records for this application' }, 403);
+
+      // Get activity timeline (public-safe: no user names, no internal notes)
+      const emailCol = type === 'permit' ? 'permits' : type === 'license' ? 'licenses' : type === 'reservation' ? 'parks' : 'requests';
+      const refId = await db.prepare(`SELECT id FROM ${type === 'permit' ? 'permits' : type === 'license' ? 'business_licenses' : type === 'reservation' ? 'park_reservations' : 'citizen_requests'} WHERE ${type === 'permit' ? 'permit_number' : type === 'license' ? 'license_number' : type === 'reservation' ? 'reservation_number' : 'request_number'} = ?`).bind(number).first();
+      const activity = refId ? await db.prepare("SELECT action, created_at FROM activity_log WHERE module = ? AND ref_id = ? ORDER BY created_at DESC LIMIT 10").bind(emailCol, refId.id).all() : { results: [] };
+
+      // Strip email fields from response for privacy
+      delete result.applicant_email; delete result.owner_email; delete result.contact_email; delete result.reporter_email;
+
+      return json({ type, ...result, timeline: activity.results });
+    }
+
+    // ==================================================================
     // DOCUMENTS DOWNLOAD
     // ==================================================================
     const dlMatch = path.match(/^\/documents\/(\d+)\/download$/);

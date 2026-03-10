@@ -1,8 +1,7 @@
 // ==========================================================================
 // PUBLIC PORTAL — citizen-facing components
 // ==========================================================================
-const FORM_STEPS = ['type', 'property', 'applicant', 'project', 'review'];
-const STEP_LABELS = ['Permit Type', 'Property', 'Applicant', 'Project Details', 'Review & Submit'];
+const AUTOSAVE_KEY = 'tforks_permit_draft';
 
 // ---------- Citizen Request Modal ----------
 const CitizenRequestModal = ({ onClose, onCreated }) => {
@@ -179,14 +178,15 @@ const ParkReservationModal = ({ onClose, onCreated }) => {
   );
 };
 
-// ---------- New Permit Modal (multi-step wizard) ----------
+// ---------- New Permit Application (single scrollable form with auto-save) ----------
 const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType }) => {
-  const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [dragOver, setDragOver] = useState(false);
+  const [saved, setSaved] = useState(false);
   const fileInputRef = useRef(null);
+  const saveTimer = useRef(null);
   const toast = useToast();
   const types = permitTypes.length > 0 ? permitTypes : DEFAULT_PERMIT_TYPES;
 
@@ -206,7 +206,11 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
   };
   const removeAttachment = (idx) => setAttachments(prev => prev.filter((_, i) => i !== idx));
 
-  const [form, setForm] = useState({
+  // Load saved draft from localStorage
+  const loadDraft = () => {
+    try { const d = JSON.parse(localStorage.getItem(AUTOSAVE_KEY)); return d || null; } catch { return null; }
+  };
+  const defaultForm = {
     permit_type_code: initialType || 'ZP-R',
     address: '', parcel_id: '', lot: '', block: '', subdivision: '',
     zoning_district: '', flood_zone: '', land_area: '',
@@ -218,14 +222,37 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
     variance_regulation: '', variance_hardship: '', variance_public_interest: '',
     floodplain_permit_num: '', elevation_cert: '', foundation_type: '',
     after_the_fact: false, corner_pins: '',
+  };
+  const draft = loadDraft();
+  const [form, setForm] = useState(draft ? { ...defaultForm, ...draft } : defaultForm);
+  const [hasDraft] = useState(!!draft);
+
+  // Auto-save to localStorage on every change (debounced 800ms)
+  const update = (f, v) => setForm(p => {
+    const next = { ...p, [f]: v };
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      try { localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(next)); setSaved(true); setTimeout(() => setSaved(false), 2000); } catch {}
+    }, 800);
+    return next;
   });
-  const update = (f, v) => setForm(p => ({ ...p, [f]: v }));
+  const clearDraft = () => { try { localStorage.removeItem(AUTOSAVE_KEY); } catch {} };
+
   const selectedType = types.find(t => t.code === form.permit_type_code) || types[0];
   const isZoning = form.permit_type_code.startsWith('ZP');
   const isCUP = form.permit_type_code === 'CUP';
   const isVariance = form.permit_type_code === 'VAR';
   const isFloodplain = form.permit_type_code === 'FP';
   const inp = "w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 outline-none";
+  const section = "border-t pt-5 mt-6";
+  const sectionHead = (icon, title, desc) => (
+    <div className="flex items-center gap-3 mb-4">
+      <div className="w-9 h-9 bg-sky-100 rounded-lg flex items-center justify-center flex-shrink-0"><Icon name={icon} size={18} className="text-sky-700" /></div>
+      <div><h4 className="font-semibold text-gray-900">{title}</h4>{desc && <p className="text-xs text-gray-500">{desc}</p>}</div>
+    </div>
+  );
+
+  const canSubmit = !!form.address && !!form.applicant_name && !!form.description && agreed;
 
   const handleSubmit = async () => {
     if (demoMode) { toast('Demo mode — application not saved', 'warning'); onClose(); return; }
@@ -234,18 +261,11 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
       const payload = { ...form, valuation: parseFloat(form.valuation) || 0, square_footage: parseInt(form.square_footage) || null };
       if (attachments.length > 0) payload.files = attachments;
       const result = await api.createPermit(payload);
+      clearDraft();
       toast(`Application submitted! Permit #${result.permit_number} — Fee: $${result.fees}${result.documents ? ` — ${result.documents} file(s) attached` : ''}`);
       onCreated(); onClose();
     } catch (err) { toast(err.message, 'error'); }
     setSubmitting(false);
-  };
-
-  const canNext = () => {
-    if (step === 0) return !!form.permit_type_code;
-    if (step === 1) return !!form.address;
-    if (step === 2) return !!form.applicant_name;
-    if (step === 3) return !!form.description;
-    return agreed;
   };
 
   return (
@@ -257,38 +277,30 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
             <div className="w-10 h-10 bg-white/15 rounded-lg flex items-center justify-center backdrop-blur"><Icon name="file-text" size={20} className="text-white" /></div>
             <div><h3 className="font-bold text-lg">Online Permit Application</h3><p className="text-sky-300 text-xs mt-0.5">Town of Three Forks, MT &mdash; Title 11 Zoning Code</p></div>
           </div>
-          <button onClick={onClose} className="relative z-10 w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center hover:bg-white/20 transition"><Icon name="x" size={18} className="text-white" /></button>
+          <div className="relative z-10 flex items-center gap-2">
+            {saved && <span className="text-xs text-sky-200 flex items-center gap-1"><Icon name="check" size={12} /> Saved</span>}
+            <button onClick={() => { clearDraft(); onClose(); }} className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center hover:bg-white/20 transition"><Icon name="x" size={18} className="text-white" /></button>
+          </div>
         </div>
-        <div className="px-5 py-3 border-b bg-gray-50 flex items-center gap-1">
-          {STEP_LABELS.map((label, i) => (
-            <React.Fragment key={i}>
-              <button onClick={() => i < step && setStep(i)} className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition ${i === step ? 'bg-sky-100 text-sky-800' : i < step ? 'text-sky-600 hover:bg-sky-50 cursor-pointer' : 'text-gray-400'}`}>
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${i < step ? 'bg-sky-600 text-white' : i === step ? 'bg-sky-700 text-white' : 'bg-gray-200 text-gray-500'}`}>{i < step ? '\u2713' : i + 1}</span>
-                <span className="hidden sm:inline">{label}</span>
-              </button>
-              {i < STEP_LABELS.length - 1 && <div className={`flex-1 h-px ${i < step ? 'bg-sky-400' : 'bg-gray-200'}`} />}
-            </React.Fragment>
-          ))}
-        </div>
-        <div className="flex-1 overflow-auto p-5">
-          {step === 0 && (
-            <div className="space-y-4">
-              <div><h4 className="font-semibold text-gray-900 mb-1">Select Permit Type</h4><p className="text-xs text-gray-500 mb-3">Choose the type of permit you need.</p></div>
-              <div className="grid gap-2">
-                {types.map(t => (
-                  <label key={t.code} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${form.permit_type_code === t.code ? 'border-sky-500 bg-sky-50 ring-1 ring-sky-500' : 'border-gray-200 hover:border-sky-300'}`}>
-                    <input type="radio" name="ptype" checked={form.permit_type_code === t.code} onChange={() => update('permit_type_code', t.code)} className="accent-sky-600" />
-                    <div className="flex-1"><div className="font-medium text-sm text-gray-900">{t.name}</div>{t.description && <div className="text-xs text-gray-500 mt-0.5">{t.description}</div>}</div>
-                    <span className="text-sm font-semibold text-sky-700">${t.base_fee}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-          {step === 1 && (
-            <div className="space-y-4">
-              <div><h4 className="font-semibold text-gray-900 mb-1">Subject Property</h4><p className="text-xs text-gray-500 mb-3">Property address and legal description where work will occur.</p></div>
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">Site Address *</label><input type="text" value={form.address} onChange={e => update('address', e.target.value)} placeholder="e.g. 121 E Jefferson St" required className={inp} style={{fontSize:'16px'}} /></div>
+        {hasDraft && <div className="px-5 py-2 bg-emerald-50 border-b border-emerald-100 flex items-center gap-2 text-sm text-emerald-700"><Icon name="save" size={14} /> Draft restored from your last visit. <button onClick={() => { clearDraft(); setForm(defaultForm); }} className="text-emerald-600 underline text-xs ml-auto">Clear draft</button></div>}
+        <div className="flex-1 overflow-auto p-5 space-y-0">
+          {/* 1. Permit Type */}
+          {sectionHead('clipboard-list', 'Permit Type', 'Choose the type of permit you need.')}
+          <div className="grid gap-2 mb-2">
+            {types.map(t => (
+              <label key={t.code} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${form.permit_type_code === t.code ? 'border-sky-500 bg-sky-50 ring-1 ring-sky-500' : 'border-gray-200 hover:border-sky-300'}`}>
+                <input type="radio" name="ptype" checked={form.permit_type_code === t.code} onChange={() => update('permit_type_code', t.code)} className="accent-sky-600" />
+                <div className="flex-1"><div className="font-medium text-sm text-gray-900">{t.name}</div>{t.description && <div className="text-xs text-gray-500 mt-0.5">{t.description}</div>}</div>
+                <span className="text-sm font-semibold text-sky-700">${t.base_fee}</span>
+              </label>
+            ))}
+          </div>
+
+          {/* 2. Subject Property */}
+          <div className={section}>
+            {sectionHead('map-pin', 'Subject Property', 'Property address and legal description where work will occur.')}
+            <div className="space-y-3">
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Site Address *</label><input type="text" value={form.address} onChange={e => update('address', e.target.value)} placeholder="e.g. 121 E Jefferson St" className={inp} style={{fontSize:'16px'}} /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Parcel ID</label><input type="text" value={form.parcel_id} onChange={e => update('parcel_id', e.target.value)} placeholder="06-0450-XX-X-XX-XX-0000" className={`${inp} font-mono`} style={{fontSize:'16px'}} /></div>
               <div className="grid grid-cols-3 gap-3">
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Lot(s)</label><input type="text" value={form.lot} onChange={e => update('lot', e.target.value)} className={inp} /></div>
@@ -310,16 +322,24 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
               )}
               <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.after_the_fact} onChange={e => update('after_the_fact', e.target.checked)} className="accent-sky-600" /><span className="text-gray-700">This is an after-the-fact permit application</span></label>
             </div>
-          )}
-          {step === 2 && (
-            <div className="space-y-4">
-              <div><h4 className="font-semibold text-gray-900 mb-1">Applicant Information</h4><p className="text-xs text-gray-500 mb-3">The person responsible for this permit request.</p></div>
+          </div>
+
+          {/* 3. Applicant Information */}
+          <div className={section}>
+            {sectionHead('user', 'Applicant Information', 'The person responsible for this permit request.')}
+            <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Applicant Name *</label><input type="text" value={form.applicant_name} onChange={e => update('applicant_name', e.target.value)} placeholder="Full name" required className={inp} style={{fontSize:'16px'}} /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Applicant Name *</label><input type="text" value={form.applicant_name} onChange={e => update('applicant_name', e.target.value)} placeholder="Full name" className={inp} style={{fontSize:'16px'}} /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label><input type="tel" value={form.applicant_phone} onChange={e => update('applicant_phone', e.target.value)} placeholder="(406) 555-0123" className={inp} style={{fontSize:'16px'}} /></div>
               </div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email" value={form.applicant_email} onChange={e => update('applicant_email', e.target.value)} placeholder="applicant@email.com" className={inp} style={{fontSize:'16px'}} /></div>
-              <div className="border-t pt-4 mt-4"><h4 className="font-semibold text-gray-900 mb-1">Property Owner</h4><p className="text-xs text-gray-500 mb-3">If different from applicant.</p></div>
+            </div>
+          </div>
+
+          {/* 4. Property Owner */}
+          <div className={section}>
+            {sectionHead('home', 'Property Owner', 'If different from applicant. Leave blank if you are the owner.')}
+            <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Owner Name</label><input type="text" value={form.owner_name} onChange={e => update('owner_name', e.target.value)} className={inp} /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Owner Phone</label><input type="tel" value={form.owner_phone} onChange={e => update('owner_phone', e.target.value)} className={inp} /></div>
@@ -330,8 +350,14 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">State</label><input type="text" value={form.owner_state} onChange={e => update('owner_state', e.target.value)} className={inp} /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Zip</label><input type="text" value={form.owner_zip} onChange={e => update('owner_zip', e.target.value)} className={inp} /></div>
               </div>
-              {isZoning && (<>
-                <div className="border-t pt-4 mt-4"><h4 className="font-semibold text-gray-900 mb-1">Builder/Contractor</h4></div>
+            </div>
+          </div>
+
+          {/* 5. Builder/Contractor (zoning permits only) */}
+          {isZoning && (
+            <div className={section}>
+              {sectionHead('hard-hat', 'Builder / Contractor')}
+              <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Builder Name</label><input type="text" value={form.builder_name} onChange={e => update('builder_name', e.target.value)} className={inp} /></div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Builder Phone</label><input type="tel" value={form.builder_phone} onChange={e => update('builder_phone', e.target.value)} className={inp} /></div>
@@ -340,16 +366,17 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Builder Email</label><input type="email" value={form.builder_email} onChange={e => update('builder_email', e.target.value)} className={inp} /></div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Business License #</label><input type="text" value={form.builder_license} onChange={e => update('builder_license', e.target.value)} className={inp} /></div>
                 </div>
-              </>)}
+              </div>
             </div>
           )}
-          {step === 3 && (
-            <div className="space-y-4">
-              <div><h4 className="font-semibold text-gray-900 mb-1">Project Details</h4>
-                <p className="text-xs text-gray-500 mb-3">{isZoning ? 'Describe the proposed structure and use. Reference Three Forks Zoning Code Title 11.' : isCUP ? 'Describe the conditional use per Title 11, Chapter 12.' : isVariance ? 'Explain your variance request and hardship.' : isFloodplain ? 'Describe proposed work in the floodplain.' : 'Provide details about the proposed work.'}</p></div>
+
+          {/* 6. Project Details */}
+          <div className={section}>
+            {sectionHead('hammer', 'Project Details', isZoning ? 'Describe the proposed structure and use. Reference Three Forks Zoning Code Title 11.' : isCUP ? 'Describe the conditional use per Title 11, Chapter 12.' : isVariance ? 'Explain your variance request and hardship.' : isFloodplain ? 'Describe proposed work in the floodplain.' : 'Provide details about the proposed work.')}
+            <div className="space-y-3">
               {isCUP && <div><label className="block text-sm font-medium text-gray-700 mb-1">Project Name</label><input type="text" value={form.project_name} onChange={e => update('project_name', e.target.value)} className={inp} /></div>}
               <div><label className="block text-sm font-medium text-gray-700 mb-1">{isVariance ? 'Explain Variance Request *' : isCUP ? 'Conditional Use Description *' : 'Describe Proposed Structure and Use *'}</label>
-                <textarea value={form.description} onChange={e => update('description', e.target.value)} placeholder={isVariance ? 'Which zoning regulations does the variance apply to...' : isCUP ? 'Describe the conditional use...' : 'Describe the proposed work...'} rows={4} required className={inp} style={{fontSize:'16px'}} /></div>
+                <textarea value={form.description} onChange={e => update('description', e.target.value)} placeholder={isVariance ? 'Which zoning regulations does the variance apply to...' : isCUP ? 'Describe the conditional use...' : 'Describe the proposed work...'} rows={4} className={inp} style={{fontSize:'16px'}} /></div>
               {isVariance && (<>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Describe the Hardship *</label><textarea value={form.variance_hardship} onChange={e => update('variance_hardship', e.target.value)} placeholder="Describe the hardship..." rows={3} className={inp} /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">How Does This Serve the Public Interest? *</label><textarea value={form.variance_public_interest} onChange={e => update('variance_public_interest', e.target.value)} placeholder="How this serves the public interest..." rows={3} className={inp} /></div>
@@ -366,72 +393,53 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Developer/Architect</label><input type="text" value={form.developer_name} onChange={e => update('developer_name', e.target.value)} className={inp} /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Developer Phone</label><input type="tel" value={form.developer_phone} onChange={e => update('developer_phone', e.target.value)} className={inp} /></div>
               </div>)}
-              <div className="border-t pt-4 mt-2">
-                <h4 className="font-semibold text-gray-900 mb-1 flex items-center gap-2"><Icon name="upload" size={16} className="text-sky-600" /> Attach Documents</h4>
-                <p className="text-xs text-gray-500 mb-3">PDF, PNG, JPG, TIFF accepted (max 10 MB each).</p>
-                <div className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition ${dragOver ? 'border-sky-500 bg-sky-50' : 'border-gray-300 hover:border-sky-400 hover:bg-gray-50'}`}
-                  onClick={() => fileInputRef.current?.click()} onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}>
-                  <input ref={fileInputRef} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif" className="hidden" onChange={e => { handleFiles(e.target.files); e.target.value = ''; }} />
-                  <div className="w-12 h-12 bg-sky-100 rounded-full flex items-center justify-center mx-auto mb-2"><Icon name="cloud-upload" size={24} className="text-sky-600" /></div>
-                  <p className="text-sm font-medium text-gray-700">Drag &amp; drop files here, or click to browse</p>
-                </div>
-                {attachments.length > 0 && <div className="mt-3 space-y-2">{attachments.map((att, i) => (
-                  <div key={i} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg border">
-                    <div className="w-8 h-8 bg-red-50 rounded flex items-center justify-center flex-shrink-0"><Icon name={att.filename.endsWith('.pdf') ? 'file-text' : 'image'} size={14} className="text-red-500" /></div>
-                    <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{att.filename}</div><div className="text-[10px] text-gray-400">{(att.file_size / 1024 / 1024).toFixed(1)} MB <span className="px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded text-[9px] font-medium ml-1">{att.doc_type.replace('_', ' ')}</span></div></div>
-                    <button onClick={e => { e.stopPropagation(); removeAttachment(i); }} className="text-gray-400 hover:text-red-500 p-1"><Icon name="x" size={14} /></button>
-                  </div>
-                ))}</div>}
-              </div>
             </div>
-          )}
-          {step === 4 && (
-            <div className="space-y-4">
-              <div><h4 className="font-semibold text-gray-900 mb-1">Review Your Application</h4><p className="text-xs text-gray-500 mb-4">Please review all information before submitting.</p></div>
-              <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-gray-500">Permit Type:</span><span className="font-medium">{selectedType?.name}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Filing Fee:</span><span className="font-semibold text-sky-700">${selectedType?.base_fee}</span></div>
-                <div className="border-t pt-2 mt-2" />
-                <div className="flex justify-between"><span className="text-gray-500">Address:</span><span className="font-medium">{form.address}</span></div>
-                {form.parcel_id && <div className="flex justify-between"><span className="text-gray-500">Parcel:</span><span className="font-mono text-xs">{form.parcel_id}</span></div>}
-                {form.zoning_district && <div className="flex justify-between"><span className="text-gray-500">Zoning:</span><span>{form.zoning_district}</span></div>}
-                <div className="border-t pt-2 mt-2" />
-                <div className="flex justify-between"><span className="text-gray-500">Applicant:</span><span className="font-medium">{form.applicant_name}</span></div>
-                {form.applicant_phone && <div className="flex justify-between"><span className="text-gray-500">Phone:</span><span>{form.applicant_phone}</span></div>}
-                {form.owner_name && <div className="flex justify-between"><span className="text-gray-500">Owner:</span><span>{form.owner_name}</span></div>}
-                <div className="border-t pt-2 mt-2" />
-                <div><span className="text-gray-500">Description:</span><p className="mt-1 text-gray-800">{form.description}</p></div>
-                {form.valuation && <div className="flex justify-between"><span className="text-gray-500">Value:</span><span>${parseFloat(form.valuation).toLocaleString()}</span></div>}
-                {attachments.length > 0 && (<><div className="border-t pt-2 mt-2" /><div className="flex justify-between"><span className="text-gray-500">Attachments:</span><span className="font-medium">{attachments.length} file(s)</span></div>{attachments.map((att, i) => <div key={i} className="flex items-center gap-2 text-xs text-gray-600 pl-2"><Icon name="paperclip" size={12} className="text-gray-400" /><span className="truncate">{att.filename}</span></div>)}</>)}
-              </div>
-              <div className="bg-sky-50 border border-sky-200 rounded-lg p-4">
-                <h5 className="font-bold text-sm text-sky-900 mb-2">AFFIDAVIT OF OWNER</h5>
-                <p className="text-xs text-sky-800 leading-relaxed">I hereby certify under penalty of perjury and the laws of the State of Montana that the information submitted herein is full, true, complete, and accurate to the best of my knowledge. Should any information be incorrect, I understand any approval may be rescinded. The signing of this application signifies approval for representatives of the City of Three Forks to be present on the property for routine monitoring and inspection. All work shall be done in accordance with the approved plans and in compliance with the City of Three Forks Zoning Ordinance, Title 11.</p>
-                <label className="flex items-start gap-2 mt-3 cursor-pointer"><input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} className="accent-sky-600 mt-0.5" /><span className="text-sm font-medium text-sky-900">I agree to the above affidavit and certify all information is accurate</span></label>
-              </div>
-              <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 text-xs text-amber-800">
-                <p className="font-semibold">Important Reminders:</p>
-                <ul className="mt-1 space-y-0.5 list-disc ml-4">
-                  <li>Permit expires one year from issue date</li>
-                  <li>Construction must commence within 6 months</li>
-                  <li>Notify Zoning Inspector before pouring concrete</li>
-                  <li>Filing fee of ${selectedType?.base_fee} is due upon submission to City Hall</li>
-                  {isCUP && <li>Complete packages due by noon on the last Friday of the month</li>}
-                  {isCUP && <li>Two public hearings are required; you must attend both</li>}
-                </ul>
-              </div>
+          </div>
+
+          {/* 7. Attachments */}
+          <div className={section}>
+            {sectionHead('upload', 'Attach Documents', 'Site plans, floor plans, elevations — PDF, PNG, JPG, TIFF (max 10 MB each).')}
+            <div className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition ${dragOver ? 'border-sky-500 bg-sky-50' : 'border-gray-300 hover:border-sky-400 hover:bg-gray-50'}`}
+              onClick={() => fileInputRef.current?.click()} onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}>
+              <input ref={fileInputRef} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif" className="hidden" onChange={e => { handleFiles(e.target.files); e.target.value = ''; }} />
+              <div className="w-12 h-12 bg-sky-100 rounded-full flex items-center justify-center mx-auto mb-2"><Icon name="cloud-upload" size={24} className="text-sky-600" /></div>
+              <p className="text-sm font-medium text-gray-700">Drag &amp; drop files here, or click to browse</p>
             </div>
-          )}
+            {attachments.length > 0 && <div className="mt-3 space-y-2">{attachments.map((att, i) => (
+              <div key={i} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg border">
+                <div className="w-8 h-8 bg-red-50 rounded flex items-center justify-center flex-shrink-0"><Icon name={att.filename.endsWith('.pdf') ? 'file-text' : 'image'} size={14} className="text-red-500" /></div>
+                <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{att.filename}</div><div className="text-[10px] text-gray-400">{(att.file_size / 1024 / 1024).toFixed(1)} MB <span className="px-1.5 py-0.5 bg-sky-100 text-sky-700 rounded text-[9px] font-medium ml-1">{att.doc_type.replace('_', ' ')}</span></div></div>
+                <button onClick={e => { e.stopPropagation(); removeAttachment(i); }} className="text-gray-400 hover:text-red-500 p-1"><Icon name="x" size={14} /></button>
+              </div>
+            ))}</div>}
+          </div>
+
+          {/* 8. Affidavit & Submit */}
+          <div className={section}>
+            {sectionHead('shield-check', 'Affidavit & Submission')}
+            <div className="bg-sky-50 border border-sky-200 rounded-lg p-4 mb-4">
+              <h5 className="font-bold text-sm text-sky-900 mb-2">AFFIDAVIT OF OWNER</h5>
+              <p className="text-xs text-sky-800 leading-relaxed">I hereby certify under penalty of perjury and the laws of the State of Montana that the information submitted herein is full, true, complete, and accurate to the best of my knowledge. Should any information be incorrect, I understand any approval may be rescinded. The signing of this application signifies approval for representatives of the City of Three Forks to be present on the property for routine monitoring and inspection. All work shall be done in accordance with the approved plans and in compliance with the City of Three Forks Zoning Ordinance, Title 11.</p>
+              <label className="flex items-start gap-2 mt-3 cursor-pointer"><input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} className="accent-sky-600 mt-0.5" /><span className="text-sm font-medium text-sky-900">I agree to the above affidavit and certify all information is accurate</span></label>
+            </div>
+            <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 text-xs text-amber-800">
+              <p className="font-semibold">Important Reminders:</p>
+              <ul className="mt-1 space-y-0.5 list-disc ml-4">
+                <li>Permit expires one year from issue date</li>
+                <li>Construction must commence within 6 months</li>
+                <li>Notify Zoning Inspector before pouring concrete</li>
+                <li>Filing fee of ${selectedType?.base_fee} is due upon submission to City Hall</li>
+                {isCUP && <li>Complete packages due by noon on the last Friday of the month</li>}
+                {isCUP && <li>Two public hearings are required; you must attend both</li>}
+              </ul>
+            </div>
+          </div>
         </div>
         <div className="p-4 border-t bg-gray-50 rounded-b-xl flex items-center justify-between">
-          <div>{step > 0 && <button onClick={() => setStep(s => s - 1)} className="px-4 py-2 border rounded-lg text-gray-700 hover:bg-gray-100 text-sm flex items-center gap-1" style={{touchAction:'manipulation'}}><Icon name="arrow-left" size={14} /> Back</button>}</div>
+          <div className="flex items-center gap-2 text-xs text-gray-400"><Icon name="save" size={12} /> Your progress is saved automatically</div>
           <div className="flex items-center gap-2">
-            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">Cancel</button>
-            {step < 4 ? (
-              <button onClick={() => setStep(s => s + 1)} disabled={!canNext()} className="px-5 py-2 bg-sky-700 text-white rounded-lg hover:bg-sky-800 disabled:opacity-40 text-sm font-medium flex items-center gap-1" style={{touchAction:'manipulation'}}>Next <Icon name="arrow-right" size={14} /></button>
-            ) : (
-              <button onClick={handleSubmit} disabled={submitting || !agreed} className="px-5 py-2 bg-sky-700 text-white rounded-lg hover:bg-sky-800 disabled:opacity-40 text-sm font-medium flex items-center gap-1" style={{touchAction:'manipulation'}}>{submitting ? 'Submitting...' : 'Submit Application'} <Icon name="send" size={14} /></button>
-            )}
+            <button onClick={() => { clearDraft(); onClose(); }} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">Cancel</button>
+            <button onClick={handleSubmit} disabled={submitting || !canSubmit} className="px-5 py-2.5 bg-sky-700 text-white rounded-lg hover:bg-sky-800 disabled:opacity-40 text-sm font-semibold flex items-center gap-2 shadow-sm" style={{touchAction:'manipulation'}}>{submitting ? 'Submitting...' : 'Submit Application'} <Icon name="send" size={14} /></button>
           </div>
         </div>
       </div>
@@ -585,6 +593,7 @@ const PublicPortal = ({ config, permits, parcels, permitTypes, demoMode, onStaff
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [showParkModal, setShowParkModal] = useState(false);
   const [showConstructionMap, setShowConstructionMap] = useState(false);
+  const [showLookup, setShowLookup] = useState(false);
   const toast = useToast();
 
   if (showConstructionMap) {
@@ -704,7 +713,7 @@ const PublicPortal = ({ config, permits, parcels, permitTypes, demoMode, onStaff
         <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-5">
           {[
             { title: 'Apply for a Permit', desc: 'Submit a zoning, CUP, floodplain, or variance application online.', icon: 'file-plus', color: 'sky', action: () => openPermitForm(null), cta: 'Start Application' },
-            { title: 'Look Up a Permit', desc: 'Search by address, permit number, or applicant name.', icon: 'search', color: 'emerald', action: () => document.querySelector('input[placeholder*="Search"]')?.focus(), cta: 'Search Permits' },
+            { title: 'Check Application Status', desc: 'Look up the status of your permit, license, reservation, or request.', icon: 'search', color: 'emerald', action: () => setShowLookup(true), cta: 'Track Application' },
             { title: 'Report an Issue', desc: 'Report a code violation, pothole, water issue, or other concern.', icon: 'alert-triangle', color: 'orange', action: () => setShowRequestModal(true), cta: 'File Report' },
             { title: 'Reserve a Park', desc: 'Book a pavilion, field, or facility for your event or gathering.', icon: 'trees', color: 'violet', action: () => setShowParkModal(true), cta: 'Reserve Now' },
           ].map((card, i) => (
@@ -836,6 +845,127 @@ const PublicPortal = ({ config, permits, parcels, permitTypes, demoMode, onStaff
       {showNewPermit && <NewPermitModal permitTypes={permitTypes} demoMode={demoMode} initialType={newPermitType} onClose={() => { setShowNewPermit(false); setNewPermitType(null); }} onCreated={onRefresh} />}
       {showRequestModal && <CitizenRequestModal onClose={() => setShowRequestModal(false)} onCreated={onRefresh} />}
       {showParkModal && <ParkReservationModal onClose={() => setShowParkModal(false)} onCreated={onRefresh} />}
+      {showLookup && <ApplicationLookupModal onClose={() => setShowLookup(false)} />}
+    </div>
+  );
+};
+
+// ---------- Application Status Lookup Modal ----------
+const ApplicationLookupModal = ({ onClose }) => {
+  const [trackingNum, setTrackingNum] = useState('');
+  const [email, setEmail] = useState('');
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const toast = useToast();
+
+  const handleLookup = async (e) => {
+    e.preventDefault(); setError(''); setResult(null); setLoading(true);
+    try {
+      const data = await api.lookupApplication(trackingNum, email);
+      setResult(data);
+    } catch (err) { setError(err.message || 'Application not found'); }
+    setLoading(false);
+  };
+
+  const typeLabels = { permit: 'Permit', license: 'Business License', reservation: 'Park Reservation', request: 'Citizen Request' };
+  const typeIcons = { permit: 'file-text', license: 'badge', reservation: 'trees', request: 'message-circle' };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
+        <div className="p-6 border-b flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 bg-emerald-100 rounded-xl flex items-center justify-center"><Icon name="search" size={22} className="text-emerald-700" /></div>
+            <div><h2 className="text-lg font-bold text-gray-900">Check Application Status</h2><p className="text-sm text-gray-500">Enter your tracking number</p></div>
+          </div>
+          <button onClick={onClose} className="w-10 h-10 rounded-xl hover:bg-gray-100 flex items-center justify-center text-gray-400"><Icon name="x" size={20} /></button>
+        </div>
+
+        {!result ? (
+          <form onSubmit={handleLookup} className="p-6 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tracking Number *</label>
+              <input type="text" value={trackingNum} onChange={e => setTrackingNum(e.target.value.toUpperCase())} placeholder="e.g. ZP-R-2026-001, BL-2026-001, PR-2026-001" className="w-full border rounded-lg px-3 py-3 focus:ring-2 focus:ring-emerald-500 outline-none font-mono text-lg tracking-wide" style={{fontSize:'16px'}} required />
+              <p className="text-xs text-gray-400 mt-1.5">This was provided when you submitted your application</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email (optional verification)</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email used on your application" className="w-full border rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 outline-none" style={{fontSize:'16px'}} />
+              <p className="text-xs text-gray-400 mt-1">Providing your email confirms you are the applicant</p>
+            </div>
+            {error && <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2"><Icon name="alert-circle" size={16} className="text-red-500 flex-shrink-0" /><p className="text-sm text-red-700">{error}</p></div>}
+            <button type="submit" disabled={loading || !trackingNum.trim()} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-semibold disabled:opacity-50 transition flex items-center justify-center gap-2">
+              {loading ? <><div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> Looking up...</> : <><Icon name="search" size={16} /> Look Up Status</>}
+            </button>
+            <div className="bg-gray-50 rounded-lg p-3">
+              <p className="text-xs text-gray-500 font-medium mb-1.5">Tracking Number Prefixes:</p>
+              <div className="grid grid-cols-2 gap-1 text-xs text-gray-400">
+                <span>ZP / FP / CUP / VAR — Permits</span>
+                <span>BL — Business Licenses</span>
+                <span>PR — Park Reservations</span>
+                <span>CR — Citizen Requests</span>
+              </div>
+            </div>
+          </form>
+        ) : (
+          <div className="p-6 space-y-4">
+            {/* Result header */}
+            <div className="bg-gray-50 rounded-xl p-4 flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-white shadow-sm flex items-center justify-center"><Icon name={typeIcons[result.type] || 'file'} size={24} className="text-sky-600" /></div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap"><span className="font-bold text-gray-900 font-mono">{result.permit_number || result.license_number || result.reservation_number || result.request_number}</span><StatusBadge status={result.status} /></div>
+                <p className="text-sm text-gray-500">{typeLabels[result.type] || result.type}{result.type_name ? ` — ${result.type_name}` : ''}{result.category_name ? ` — ${result.category_name}` : ''}</p>
+              </div>
+            </div>
+
+            {/* Details grid */}
+            <div className="grid grid-cols-2 gap-3">
+              {result.address && <div className="bg-gray-50 rounded-lg p-3"><div className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Address</div><div className="text-sm font-medium">{result.address}</div></div>}
+              {result.applicant_name && <div className="bg-gray-50 rounded-lg p-3"><div className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Applicant</div><div className="text-sm font-medium">{result.applicant_name}</div></div>}
+              {result.business_name && <div className="bg-gray-50 rounded-lg p-3"><div className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Business</div><div className="text-sm font-medium">{result.business_name}</div></div>}
+              {result.owner_name && <div className="bg-gray-50 rounded-lg p-3"><div className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Owner</div><div className="text-sm font-medium">{result.owner_name}</div></div>}
+              {result.facility_name && <div className="bg-gray-50 rounded-lg p-3"><div className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Facility</div><div className="text-sm font-medium">{result.facility_name}{result.park_name ? ` — ${result.park_name}` : ''}</div></div>}
+              {result.event_name && <div className="bg-gray-50 rounded-lg p-3"><div className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Event</div><div className="text-sm font-medium">{result.event_name}</div></div>}
+              {result.event_date && <div className="bg-gray-50 rounded-lg p-3"><div className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Event Date</div><div className="text-sm font-medium">{result.event_date}{result.start_time ? ` at ${result.start_time}` : ''}</div></div>}
+              {result.contact_name && <div className="bg-gray-50 rounded-lg p-3"><div className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Contact</div><div className="text-sm font-medium">{result.contact_name}</div></div>}
+              {result.reporter_name && <div className="bg-gray-50 rounded-lg p-3"><div className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Reported By</div><div className="text-sm font-medium">{result.reporter_name}</div></div>}
+              {(result.submitted_at || result.created_at) && <div className="bg-gray-50 rounded-lg p-3"><div className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Submitted</div><div className="text-sm font-medium">{(result.submitted_at || result.created_at).split('T')[0]}</div></div>}
+              {result.decision_date && <div className="bg-gray-50 rounded-lg p-3"><div className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Decision Date</div><div className="text-sm font-medium">{result.decision_date}</div></div>}
+              {result.issued_date && <div className="bg-gray-50 rounded-lg p-3"><div className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Issued</div><div className="text-sm font-medium">{result.issued_date}</div></div>}
+              {result.expiration_date && <div className="bg-gray-50 rounded-lg p-3"><div className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Expires</div><div className="text-sm font-medium">{result.expiration_date}</div></div>}
+              {result.resolved_at && <div className="bg-gray-50 rounded-lg p-3"><div className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Resolved</div><div className="text-sm font-medium">{result.resolved_at.split('T')[0]}</div></div>}
+              {(result.fees_calculated || result.annual_fee || result.total_fee) != null && <div className="bg-gray-50 rounded-lg p-3"><div className="text-[10px] text-gray-400 uppercase font-semibold mb-0.5">Fees</div><div className="text-sm font-medium">${(result.fees_calculated || result.annual_fee || result.total_fee || 0).toLocaleString()} {result.fees_paid > 0 ? `($${result.fees_paid} paid)` : ''}</div></div>}
+            </div>
+
+            {/* Conditions / Resolution */}
+            {result.conditions && <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-200"><div className="flex items-center gap-1.5 mb-1"><Icon name="check-circle" size={13} className="text-emerald-600" /><span className="text-[10px] text-emerald-700 uppercase font-semibold">Conditions of Approval</span></div><p className="text-sm text-emerald-800">{result.conditions}</p></div>}
+            {result.denial_reason && <div className="bg-red-50 rounded-lg p-3 border border-red-200"><div className="flex items-center gap-1.5 mb-1"><Icon name="x-circle" size={13} className="text-red-600" /><span className="text-[10px] text-red-700 uppercase font-semibold">Reason for Denial</span></div><p className="text-sm text-red-800">{result.denial_reason}</p></div>}
+            {result.resolution && <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-200"><div className="flex items-center gap-1.5 mb-1"><Icon name="check-circle" size={13} className="text-emerald-600" /><span className="text-[10px] text-emerald-700 uppercase font-semibold">Resolution</span></div><p className="text-sm text-emerald-800">{result.resolution}</p></div>}
+            {result.description && result.type === 'request' && <div className="bg-gray-50 rounded-lg p-3"><div className="text-[10px] text-gray-400 uppercase font-semibold mb-1">Description</div><p className="text-sm text-gray-700">{result.description}</p></div>}
+
+            {/* Activity timeline */}
+            {result.timeline?.length > 0 && (
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5"><Icon name="clock" size={14} /> Activity Timeline</h4>
+                <div className="space-y-0 relative pl-4 border-l-2 border-gray-200">
+                  {result.timeline.map((t, i) => (
+                    <div key={i} className="pb-3 relative">
+                      <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-white border-2 border-sky-400" />
+                      <p className="text-sm font-medium text-gray-800">{t.action}</p>
+                      <p className="text-xs text-gray-400">{new Date(t.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Contact info + search again */}
+            <div className="bg-sky-50 rounded-lg p-3 border border-sky-100 flex items-start gap-2"><Icon name="phone" size={14} className="text-sky-600 flex-shrink-0 mt-0.5" /><p className="text-xs text-sky-800">Questions? Call <a href="tel:4062853431" className="font-semibold underline">(406) 285-3431</a> or visit City Hall, 206 Main St, Mon-Fri 8am-5pm.</p></div>
+            <button onClick={() => { setResult(null); setError(''); setTrackingNum(''); setEmail(''); }} className="w-full border border-gray-200 text-gray-600 hover:bg-gray-50 py-2.5 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2"><Icon name="arrow-left" size={14} /> Look Up Another Application</button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
