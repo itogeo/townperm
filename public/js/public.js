@@ -182,6 +182,7 @@ const ParkReservationModal = ({ onClose, onCreated }) => {
 const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType }) => {
   const [submitting, setSubmitting] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const [showTypeList, setShowTypeList] = useState(!initialType);
   const [attachments, setAttachments] = useState([]);
   const [dragOver, setDragOver] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -287,17 +288,25 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
         </div>
         {hasDraft && <div className="px-5 py-2 bg-emerald-50 border-b border-emerald-100 flex items-center gap-2 text-sm text-emerald-700"><Icon name="save" size={14} /> Draft restored from your last visit. <button onClick={() => { clearDraft(); setForm(defaultForm); }} className="text-emerald-600 underline text-xs ml-auto">Clear draft</button></div>}
         <div className="flex-1 overflow-auto p-5 space-y-0">
-          {/* 1. Permit Type */}
-          {sectionHead('clipboard-list', 'Permit Type', 'Choose the type of permit you need.')}
-          <div className="grid gap-2 mb-2">
-            {types.map(t => (
-              <label key={t.code} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${form.permit_type_code === t.code ? 'border-sky-500 bg-sky-50 ring-1 ring-sky-500' : 'border-gray-200 hover:border-sky-300'}`}>
-                <input type="radio" name="ptype" checked={form.permit_type_code === t.code} onChange={() => update('permit_type_code', t.code)} className="accent-sky-600" />
-                <div className="flex-1"><div className="font-medium text-sm text-gray-900">{t.name}</div>{t.description && <div className="text-xs text-gray-500 mt-0.5">{t.description}</div>}</div>
-                <span className="text-sm font-semibold text-sky-700">${t.base_fee}</span>
-              </label>
-            ))}
-          </div>
+          {/* 1. Permit Type — collapsed once selected */}
+          {showTypeList ? (<>
+            {sectionHead('clipboard-list', 'Select Application Type', 'Choose the type of permit you need.')}
+            <div className="grid gap-2 mb-2">
+              {types.map(t => (
+                <label key={t.code} onClick={() => { update('permit_type_code', t.code); setShowTypeList(false); }} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${form.permit_type_code === t.code ? 'border-sky-500 bg-sky-50 ring-1 ring-sky-500' : 'border-gray-200 hover:border-sky-300'}`}>
+                  <input type="radio" name="ptype" checked={form.permit_type_code === t.code} readOnly className="accent-sky-600" />
+                  <div className="flex-1"><div className="font-medium text-sm text-gray-900">{t.name}</div>{t.description && <div className="text-xs text-gray-500 mt-0.5">{t.description}</div>}</div>
+                  <span className="text-sm font-semibold text-sky-700">${t.base_fee}</span>
+                </label>
+              ))}
+            </div>
+          </>) : (
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-sky-50 border border-sky-200 mb-2">
+              <div className="w-9 h-9 bg-sky-100 rounded-lg flex items-center justify-center flex-shrink-0"><Icon name="file-text" size={18} className="text-sky-700" /></div>
+              <div className="flex-1 min-w-0"><div className="font-semibold text-gray-900">{selectedType?.name}</div><div className="text-xs text-gray-500">{selectedType?.description || `Filing fee: $${selectedType?.base_fee}`}</div></div>
+              <button onClick={() => setShowTypeList(true)} className="px-3 py-1.5 bg-white border border-sky-300 text-sky-700 rounded-lg text-xs font-medium hover:bg-sky-50 transition flex items-center gap-1"><Icon name="repeat" size={12} /> Switch Form</button>
+            </div>
+          )}
 
           {/* 2. Subject Property */}
           <div className={section}>
@@ -393,28 +402,20 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
           <div className={section}>
             {sectionHead('hammer', 'Project Details', isZoning ? 'Describe the proposed structure and use. Reference Three Forks Zoning Code Title 11.' : isCUP ? 'Describe the conditional use per Title 11, Chapter 12.' : isVariance ? 'Explain your variance request and hardship.' : isFloodplain ? 'Describe proposed work in the floodplain.' : 'Provide details about the proposed work.')}
             <div className="space-y-3">
-              {isCUP && <div><label className="block text-sm font-medium text-gray-700 mb-1">Project Name</label><input type="text" value={form.project_name} onChange={e => update('project_name', e.target.value)} className={inp} /></div>}
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">{isVariance ? 'Explain Variance Request *' : isCUP ? 'Conditional Use Description *' : 'Describe Proposed Structure and Use *'}</label>
-                <textarea value={form.description} onChange={e => update('description', e.target.value)} placeholder={isVariance ? 'Which zoning regulations does the variance apply to...' : isCUP ? 'Describe the conditional use...' : 'Describe the proposed work...'} rows={4} className={inp} style={{fontSize:'16px'}} /></div>
+              {isCUP && F('Project Name','project_name')}
+              {F(isVariance ? 'Explain Variance Request *' : isCUP ? 'Conditional Use Description *' : 'Describe Proposed Structure and Use *', 'description', {type:'textarea',rows:4,ph:isVariance?'Which zoning regulations does the variance apply to...':isCUP?'Describe the conditional use...':'Describe the proposed work...',big:1})}
               {isVariance && (<>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Zoning Regulations Variance Applies To *</label><textarea value={form.variance_regulation} onChange={e => update('variance_regulation', e.target.value)} placeholder="Which zoning regulations does this variance apply to..." rows={3} className={inp} /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Describe the Hardship *</label><textarea value={form.variance_hardship} onChange={e => update('variance_hardship', e.target.value)} placeholder="Describe the hardship imposed by the zoning regulations..." rows={3} className={inp} /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">How Does This Serve the Public Interest? *</label><textarea value={form.variance_public_interest} onChange={e => update('variance_public_interest', e.target.value)} placeholder="Describe how this variance will serve the public interest..." rows={3} className={inp} /></div>
+                {F('Zoning Regulations Variance Applies To *','variance_regulation',{type:'textarea',ph:'Which zoning regulations does this variance apply to...'})}
+                {F('Describe the Hardship *','variance_hardship',{type:'textarea',ph:'Describe the hardship imposed by the zoning regulations...'})}
+                {F('How Does This Serve the Public Interest? *','variance_public_interest',{type:'textarea',ph:'Describe how this variance will serve the public interest...'})}
               </>)}
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Estimated Value ($)</label><input type="number" value={form.valuation} onChange={e => update('valuation', e.target.value)} placeholder="0" className={inp} /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Square Footage</label><input type="number" value={form.square_footage} onChange={e => update('square_footage', e.target.value)} placeholder="Total sq ft" className={inp} /></div>
-              </div>
+              <div className="grid grid-cols-2 gap-3">{F('Estimated Value ($)','valuation',{t:'number',ph:'0'})}{F('Square Footage','square_footage',{t:'number',ph:'Total sq ft'})}</div>
               {isZoning && (<><div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Construction Start</label><input type="date" value={form.construction_start} onChange={e => update('construction_start', e.target.value)} className={inp} /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Corner Pins</label><input type="text" value={form.corner_pins} onChange={e => update('corner_pins', e.target.value)} placeholder="How many marked?" className={inp} /></div>
               </div>
               <p className="text-xs font-medium text-gray-500 mt-2">Height of Building(s) at Tallest Point:</p>
-              <div className="grid grid-cols-3 gap-3">
-                <div><label className="block text-xs font-medium text-gray-700 mb-1">Residential</label><input type="text" value={form.building_height_residential} onChange={e => update('building_height_residential', e.target.value)} placeholder="Max 36 ft" className={inp} /></div>
-                <div><label className="block text-xs font-medium text-gray-700 mb-1">Commercial</label><input type="text" value={form.building_height_commercial} onChange={e => update('building_height_commercial', e.target.value)} className={inp} /></div>
-                <div><label className="block text-xs font-medium text-gray-700 mb-1">Accessory</label><input type="text" value={form.building_height_accessory} onChange={e => update('building_height_accessory', e.target.value)} placeholder="Max 20 ft" className={inp} /></div>
-              </div></>)}
+              <div className="grid grid-cols-3 gap-3">{F('Residential','building_height_residential',{ph:'Max 36 ft'})}{F('Commercial','building_height_commercial')}{F('Accessory','building_height_accessory',{ph:'Max 20 ft'})}</div></>)}
               {isCUP && (<div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Developer/Architect</label><input type="text" value={form.developer_name} onChange={e => update('developer_name', e.target.value)} className={inp} /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Developer Phone</label><input type="tel" value={form.developer_phone} onChange={e => update('developer_phone', e.target.value)} className={inp} /></div>
