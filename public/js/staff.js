@@ -39,6 +39,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
   const [requestDetail, setRequestDetail] = useState(null);
   const [moduleSearch, setModuleSearch] = useState('');
   const [moduleComment, setModuleComment] = useState('');
+  const [moduleLoading, setModuleLoading] = useState(false);
   const toast = useToast();
 
   const pendingCount = permits.filter(p => p.status === 'pending' || p.status === 'under_review').length;
@@ -57,7 +58,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
     { id: 'reports', label: 'Reports', icon: 'bar-chart-3' },
   ];
 
-  useEffect(() => { if (demoMode) return; if (activeTab === 'licenses' && !licenses.length) api.getLicenses().then(setLicenses).catch(() => {}); if (activeTab === 'parks' && !reservations.length) api.getReservations().then(setReservations).catch(() => {}); if (activeTab === 'requests' && !requests.length) api.getRequests().then(setRequests).catch(() => {}); }, [activeTab, demoMode]);
+  useEffect(() => { if (demoMode) return; if (activeTab === 'licenses' && !licenses.length) { setModuleLoading(true); api.getLicenses().then(setLicenses).catch(() => toast('Failed to load licenses', 'error')).finally(() => setModuleLoading(false)); } if (activeTab === 'parks' && !reservations.length) { setModuleLoading(true); api.getReservations().then(setReservations).catch(() => toast('Failed to load reservations', 'error')).finally(() => setModuleLoading(false)); } if (activeTab === 'requests' && !requests.length) { setModuleLoading(true); api.getRequests().then(setRequests).catch(() => toast('Failed to load requests', 'error')).finally(() => setModuleLoading(false)); } }, [activeTab, demoMode]);
   useEffect(() => { if (demoMode) return; api.getLicenses().then(setLicenses).catch(() => {}); api.getReservations().then(setReservations).catch(() => {}); api.getRequests().then(setRequests).catch(() => {}); api.getCalendar().then(setCalendarEvents).catch(() => {}); api.getActivity(30).then(setActivityFeed).catch(() => {}); }, [demoMode]);
 
   const notifications = useMemo(() => {
@@ -71,10 +72,10 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
   const calendarDays = useMemo(() => { const y = calendarMonth.getFullYear(), m = calendarMonth.getMonth(), first = new Date(y, m, 1).getDay(), total = new Date(y, m + 1, 0).getDate(), days = []; for (let i = 0; i < first; i++) days.push(null); for (let d = 1; d <= total; d++) days.push(d); return days; }, [calendarMonth]);
   const getEventsForDay = useCallback((day) => { if (!day) return []; const ds = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`; return calendarEvents.filter(e => e.date === ds); }, [calendarMonth, calendarEvents]);
 
-  const loadDetail = async (permit) => { setSelectedPermit(permit); setDetailTab('details'); setPermitDetail(null); if (!demoMode && permit.dbId) { try { setPermitDetail(await api.getPermitDetail(permit.dbId)); } catch {} } };
-  const loadLicenseDetail = async (lic) => { setSelectedLicense(lic); setLicenseDetail(null); setModuleComment(''); if (!demoMode && lic.id) { try { setLicenseDetail(await api.getLicenseDetail(lic.id)); } catch {} } };
-  const loadReservationDetail = async (res) => { setSelectedReservation(res); setReservationDetail(null); setModuleComment(''); if (!demoMode && res.id) { try { setReservationDetail(await api.getReservationDetail(res.id)); } catch {} } };
-  const loadRequestDetail = async (req) => { setSelectedRequest(req); setRequestDetail(null); setModuleComment(''); if (!demoMode && req.id) { try { setRequestDetail(await api.getRequestDetail(req.id)); } catch {} } };
+  const loadDetail = async (permit) => { setSelectedPermit(permit); setDetailTab('details'); setPermitDetail(null); if (!demoMode && permit.dbId) { try { setPermitDetail(await api.getPermitDetail(permit.dbId)); } catch { toast('Failed to load permit details', 'error'); } } };
+  const loadLicenseDetail = async (lic) => { setSelectedLicense(lic); setLicenseDetail(null); setModuleComment(''); if (!demoMode && lic.id) { try { setLicenseDetail(await api.getLicenseDetail(lic.id)); } catch { toast('Failed to load license details', 'error'); } } };
+  const loadReservationDetail = async (res) => { setSelectedReservation(res); setReservationDetail(null); setModuleComment(''); if (!demoMode && res.id) { try { setReservationDetail(await api.getReservationDetail(res.id)); } catch { toast('Failed to load reservation details', 'error'); } } };
+  const loadRequestDetail = async (req) => { setSelectedRequest(req); setRequestDetail(null); setModuleComment(''); if (!demoMode && req.id) { try { setRequestDetail(await api.getRequestDetail(req.id)); } catch { toast('Failed to load request details', 'error'); } } };
 
   const filteredPermits = useMemo(() => {
     return permits.filter(p => {
@@ -197,7 +198,8 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
   );
 
   // Generic module table + detail panel
-  const ModulePanel = ({ items, selected, onSelect, onClose, columns, renderDetail, filterFn }) => {
+  const ModulePanel = ({ items, selected, onSelect, onClose, columns, renderDetail, filterFn, loading }) => {
+    if (loading) return <div className="flex items-center justify-center h-64"><div className="text-center"><div className="animate-spin w-8 h-8 border-2 border-sky-500 border-t-transparent rounded-full mx-auto mb-3"></div><p className="text-sm text-gray-500">Loading...</p></div></div>;
     const q = moduleSearch.toLowerCase();
     const filtered = items.filter(item => {
       const ms = !q || (filterFn ? filterFn(item, q) : JSON.stringify(item).toLowerCase().includes(q));
@@ -693,7 +695,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
 
           {/* ===== BUSINESS LICENSES ===== */}
           {activeTab === 'licenses' && (
-            <ModulePanel items={licenses} selected={selectedLicense} onSelect={loadLicenseDetail} onClose={() => { setSelectedLicense(null); setLicenseDetail(null); }}
+            <ModulePanel items={licenses} selected={selectedLicense} onSelect={loadLicenseDetail} onClose={() => { setSelectedLicense(null); setLicenseDetail(null); }} loading={moduleLoading && activeTab === 'licenses'}
               filterFn={(item, q) => (item.business_name||'').toLowerCase().includes(q) || (item.license_number||'').toLowerCase().includes(q)}
               columns={[
                 { key:'license_number', label:'License #', render: l => <div><div className="font-semibold text-sm text-sky-700">{l.license_number||`#${l.id}`}</div><div className="text-[10px] text-gray-400">{l.license_type||l.type}</div></div> },
@@ -741,7 +743,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
 
           {/* ===== PARK RESERVATIONS ===== */}
           {activeTab === 'parks' && (
-            <ModulePanel items={reservations} selected={selectedReservation} onSelect={loadReservationDetail} onClose={() => { setSelectedReservation(null); setReservationDetail(null); }}
+            <ModulePanel items={reservations} selected={selectedReservation} onSelect={loadReservationDetail} onClose={() => { setSelectedReservation(null); setReservationDetail(null); }} loading={moduleLoading && activeTab === 'parks'}
               filterFn={(item, q) => (item.event_name||'').toLowerCase().includes(q) || (item.facility_name||'').toLowerCase().includes(q) || (item.reservation_number||'').toLowerCase().includes(q)}
               columns={[
                 { key:'reservation_number', label:'Res #', render: r => <div className="font-semibold text-sm text-sky-700">{r.reservation_number||`#${r.id}`}</div> },
@@ -775,7 +777,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
 
           {/* ===== CITIZEN REQUESTS ===== */}
           {activeTab === 'requests' && (
-            <ModulePanel items={requests} selected={selectedRequest} onSelect={loadRequestDetail} onClose={() => { setSelectedRequest(null); setRequestDetail(null); }}
+            <ModulePanel items={requests} selected={selectedRequest} onSelect={loadRequestDetail} onClose={() => { setSelectedRequest(null); setRequestDetail(null); }} loading={moduleLoading && activeTab === 'requests'}
               filterFn={(item, q) => (item.category||'').toLowerCase().includes(q) || (item.location||'').toLowerCase().includes(q) || (item.request_number||'').toLowerCase().includes(q) || (item.description||'').toLowerCase().includes(q)}
               columns={[
                 { key:'request_number', label:'Request #', render: r => <div className="font-semibold text-sm text-sky-700">{r.request_number||`#${r.id}`}</div> },

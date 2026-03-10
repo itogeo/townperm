@@ -3,7 +3,7 @@
 // Cloudflare Pages Functions catch-all for /api/* routes
 // ==========================================================================
 
-import { getCityConfig, json, getCookie, getUser, ensureDB, logActivity, requireAuth, parseBody, VALID_STATUSES } from './lib/helpers.js';
+import { getCityConfig, json, getCookie, getUser, ensureDB, logActivity, requireAuth, parseBody, verifyPassword, VALID_STATUSES } from './lib/helpers.js';
 import { handlePermits } from './lib/permits.js';
 import { handleLicenses } from './lib/licenses.js';
 import { handleParks } from './lib/parks.js';
@@ -31,8 +31,9 @@ export async function onRequest(context) {
     // ==================================================================
     if (method === 'POST' && path === '/auth/login') {
       const data = await request.json();
+      if (!data.password) return json({ error: 'Password required' }, 401);
       const user = await db.prepare('SELECT * FROM users WHERE email = ?').bind(data.email || '').first();
-      if (!user || user.password_hash !== 'demo_hash') return json({ error: 'Invalid credentials' }, 401);
+      if (!user || !(await verifyPassword(data.password, user.password_hash))) return json({ error: 'Invalid credentials' }, 401);
 
       const token = crypto.randomUUID();
       await db.prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, datetime('now', '+7 days'))").bind(token, user.id).run();
@@ -110,6 +111,8 @@ export async function onRequest(context) {
     // ==================================================================
     const dlMatch = path.match(/^\/documents\/(\d+)\/download$/);
     if (method === 'GET' && dlMatch) {
+      const auth = await requireAuth(request, db);
+      if (auth.error) return auth.error;
       const doc = await db.prepare('SELECT filename, doc_type, file_data FROM documents WHERE id = ?').bind(parseInt(dlMatch[1])).first();
       if (!doc) return json({ error: 'Not found' }, 404);
       if (!doc.file_data) return json({ error: 'No file data stored' }, 404);
@@ -120,6 +123,8 @@ export async function onRequest(context) {
     // UNIFIED CALENDAR — events from all modules
     // ==================================================================
     if (method === 'GET' && path === '/calendar') {
+      const auth = await requireAuth(request, db);
+      if (auth.error) return auth.error;
       const start = url.searchParams.get('start') || new Date().toISOString().split('T')[0];
       const end = url.searchParams.get('end') || new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0];
 
@@ -172,6 +177,8 @@ export async function onRequest(context) {
     // UNIFIED ACTIVITY FEED
     // ==================================================================
     if (method === 'GET' && path === '/activity') {
+      const auth = await requireAuth(request, db);
+      if (auth.error) return auth.error;
       const limit = parseInt(url.searchParams.get('limit') || '30');
       const module = url.searchParams.get('module');
       let query = `SELECT al.*, u.first_name, u.last_name FROM activity_log al
@@ -258,6 +265,8 @@ export async function onRequest(context) {
     // UNIFIED STATS — all modules
     // ==================================================================
     if (method === 'GET' && path === '/stats') {
+      const auth = await requireAuth(request, db);
+      if (auth.error) return auth.error;
       const [pTotal, pPending, pReview, pApproved, pDenied, pVal, pFeesDue, pFeesCollected] = await Promise.all([
         db.prepare('SELECT COUNT(*) as c FROM permits').first(),
         db.prepare("SELECT COUNT(*) as c FROM permits WHERE status = 'pending'").first(),
@@ -324,6 +333,8 @@ export async function onRequest(context) {
     // STAFF
     // ==================================================================
     if (method === 'GET' && path === '/staff') {
+      const auth = await requireAuth(request, db);
+      if (auth.error) return auth.error;
       const staff = await db.prepare("SELECT id, email, first_name, last_name, title, role, phone FROM users WHERE role IN ('admin', 'staff') AND is_active = 1").all();
       return json(staff.results);
     }
@@ -343,6 +354,6 @@ export async function onRequest(context) {
 
   } catch (error) {
     console.error('API Error:', error);
-    return json({ error: error.message || 'Internal server error' }, 500);
+    return json({ error: 'Internal server error' }, 500);
   }
 }
