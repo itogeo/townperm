@@ -459,6 +459,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
                         <option value="under_review">Under Review ({permits.filter(p=>p.status==='under_review').length})</option>
                         <option value="approved">Approved ({permits.filter(p=>p.status==='approved').length})</option>
                         <option value="denied">Denied ({permits.filter(p=>p.status==='denied').length})</option>
+                        <option value="completed">Completed ({permits.filter(p=>p.status==='completed').length})</option>
                       </select>
                     </div>
                     <div className="flex items-center gap-2">

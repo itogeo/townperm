@@ -19,6 +19,7 @@ const STATUS_CONFIG = {
   in_progress: { bg: 'bg-blue-100', text: 'text-blue-800', color: '#3b82f6', label: 'IN PROGRESS' },
   resolved: { bg: 'bg-green-100', text: 'text-green-800', color: '#22c55e', label: 'RESOLVED' },
   cancelled: { bg: 'bg-gray-100', text: 'text-gray-800', color: '#6b7280', label: 'CANCELLED' },
+  completed: { bg: 'bg-emerald-100', text: 'text-emerald-800', color: '#059669', label: 'COMPLETED' },
 };
 
 const ZONING_COLORS = { 'R': '#4ade80', 'CBD': '#3b82f6', 'NHB': '#f97316', 'GI': '#a855f7', 'AG': '#84cc16', 'PLI': '#06b6d4', 'SE': '#f59e0b' };

@@ -70,8 +70,8 @@ const PermitMap = ({ permits, parcels, selectedPermit, onPermitClick, onParcelCl
   const addPermitLayers = useCallback(() => {
     if (!map.current.getSource('permits')) {
       map.current.addSource('permits', { type: 'geojson', data: permitGeoJSON });
-      map.current.addLayer({ id: 'permits-glow', type: 'circle', source: 'permits', paint: { 'circle-radius': 18, 'circle-color': ['match', ['get', 'status'], 'pending', '#eab308', 'under_review', '#3b82f6', 'approved', '#22c55e', 'denied', '#ef4444', '#6b7280'], 'circle-opacity': 0.2 }});
-      map.current.addLayer({ id: 'permits-markers', type: 'circle', source: 'permits', paint: { 'circle-radius': 10, 'circle-color': ['match', ['get', 'status'], 'pending', '#eab308', 'under_review', '#3b82f6', 'approved', '#22c55e', 'denied', '#ef4444', '#6b7280'], 'circle-stroke-width': 3, 'circle-stroke-color': '#ffffff' }});
+      map.current.addLayer({ id: 'permits-glow', type: 'circle', source: 'permits', paint: { 'circle-radius': 18, 'circle-color': ['match', ['get', 'status'], 'pending', '#eab308', 'under_review', '#3b82f6', 'approved', '#22c55e', 'denied', '#ef4444', 'completed', '#059669', '#6b7280'], 'circle-opacity': 0.2 }});
+      map.current.addLayer({ id: 'permits-markers', type: 'circle', source: 'permits', paint: { 'circle-radius': 10, 'circle-color': ['match', ['get', 'status'], 'pending', '#eab308', 'under_review', '#3b82f6', 'approved', '#22c55e', 'denied', '#ef4444', 'completed', '#059669', '#6b7280'], 'circle-stroke-width': 3, 'circle-stroke-color': '#ffffff' }});
       map.current.addLayer({ id: 'permits-labels', type: 'symbol', source: 'permits', layout: { 'text-field': ['get', 'typeCode'], 'text-size': 9, 'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold'], 'text-allow-overlap': true }, paint: { 'text-color': '#ffffff' }});
       map.current.on('click', 'permits-markers', handleMarkerClick);
       map.current.on('click', 'permits-labels', handleMarkerClick);
