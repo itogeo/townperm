@@ -889,7 +889,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
           {/* ===== MAP ===== */}
           {activeTab === 'map' && (
             <div className="bg-white rounded-xl shadow-sm border overflow-hidden" style={{height:'calc(100vh - 160px)'}}>
-              <PermitMap permits={permits} parcels={parcels} selectedPermit={selectedPermit} onPermitClick={p => { setActiveTab('permits'); loadDetail(p); }} config={config} />
+              <PermitMap permits={permits} parcels={parcels} selectedPermit={selectedPermit} onPermitClick={p => { setActiveTab('permits'); loadDetail(p); }} config={config} showInfrastructure={true} />
             </div>
           )}
 

@@ -29,7 +29,7 @@ const PERMIT_STATUSES = [
   { id: 'completed', label: 'Completed', color: '#059669' },
 ];
 
-const PermitMap = ({ permits, parcels, selectedPermit, onPermitClick, onParcelClick, config, className = 'h-full', showControls = true }) => {
+const PermitMap = ({ permits, parcels, selectedPermit, onPermitClick, onParcelClick, config, className = 'h-full', showControls = true, showInfrastructure = false }) => {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const popup = useRef(null);
@@ -205,8 +205,8 @@ const PermitMap = ({ permits, parcels, selectedPermit, onPermitClick, onParcelCl
               </button>
             ))}
           </div>
-          {/* Layers button */}
-          <div className="absolute top-14 right-14 z-10">
+          {/* Layers button — only for staff infrastructure view */}
+          {showInfrastructure && <div className="absolute top-14 right-14 z-10">
             <button onClick={() => setShowLayerPanel(v => !v)} className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium rounded-lg shadow-md border transition ${showLayerPanel || activeLayerCount > 0 ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
               <Icon name="layers" size={12} /> Layers
               {activeLayerCount > 0 && <span className="bg-white/25 text-white text-[9px] font-bold rounded-full px-1.5 py-0.5 ml-0.5">{activeLayerCount}</span>}
@@ -233,7 +233,7 @@ const PermitMap = ({ permits, parcels, selectedPermit, onPermitClick, onParcelCl
                 ))}
               </div>
             )}
-          </div>
+          </div>}
         </>
       )}
       {/* Legend with toggleable permit statuses */}
