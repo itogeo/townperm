@@ -41,6 +41,16 @@ const FORM_CATALOG = [
       fields: [['Homeowner Name *','owner_name'],['Address to Check *','address'],['Phone *','phone','tel'],['Email','email','email'],['Departure Date *','departure_date','date'],['Return Date *','return_date','date'],['Emergency Contact Name *','emergency_name'],['Emergency Contact Phone *','emergency_phone','tel'],['Vehicle(s) Left at Home','vehicles'],['Lights on Timers?','lights_timers','select',['','Yes','No']],['Newspapers/Mail Stopped?','mail_stopped','select',['','Yes','No']],['Pets on Property?','pets'],['Alarm System?','alarm','select',['','Yes','No']],['Special Instructions','instructions','textarea']] },
     { code: 'PRR', name: 'Public Records Request', fee: 0, online: true, pdf: `${TF_URL}/Request_for_Public_Records_Policy_V3.pdf`,
       fields: [['Applicant Name *','name'],['Mailing Address','address'],['Phone','phone','tel'],['Email','email','email'],['Cell Phone','cell'],['Description of Records Requested *','description','textarea'],['Preferred Delivery Method','delivery','select',['','Inspect in Person','Paper Copies','Electronic/Email']]] },
+    { code: 'EMP', name: 'Employment Application', fee: 0, online: true, pdf: `${TF_URL}/Employment_Application.pdf`,
+      fields: [['Full Name (Last, First, M.I.) *','name'],['Date Available','date_available','date'],['Physical Address *','address'],['Apartment/Unit #','apt'],['Mailing Address (if different)','mailing_address'],['City *','city'],['State *','state'],['ZIP Code *','zip'],['Phone *','phone','tel'],['Email *','email','email'],['Position Applying For *','position'],['Authorized to Work in US? *','work_auth','select',['','Yes','No']],['Previously Worked for City?','prev_city_employee','select',['','Yes','No']],['If Yes, When?','prev_city_when'],
+        ['High School Name','hs_name'],['High School Address','hs_address'],['HS Graduate?','hs_grad','select',['','Yes','No']],['HS Diploma/Degree','hs_degree'],
+        ['College Name','college_name'],['College Address','college_address'],['College Graduate?','college_grad','select',['','Yes','No']],['College Degree','college_degree'],
+        ['Reference 1 — Name','ref1_name'],['Reference 1 — Relationship','ref1_relation'],['Reference 1 — Phone','ref1_phone','tel'],
+        ['Reference 2 — Name','ref2_name'],['Reference 2 — Relationship','ref2_relation'],['Reference 2 — Phone','ref2_phone','tel'],
+        ['Reference 3 — Name','ref3_name'],['Reference 3 — Relationship','ref3_relation'],['Reference 3 — Phone','ref3_phone','tel'],
+        ['Previous Employer 1 — Company','emp1_company'],['Employer 1 — Job Title','emp1_title'],['Employer 1 — Phone','emp1_phone','tel'],['Employer 1 — Dates','emp1_dates'],['Employer 1 — Reason for Leaving','emp1_reason'],
+        ['Previous Employer 2 — Company','emp2_company'],['Employer 2 — Job Title','emp2_title'],['Employer 2 — Phone','emp2_phone','tel'],['Employer 2 — Dates','emp2_dates'],['Employer 2 — Reason for Leaving','emp2_reason'],
+        ['Ever Terminated or Suspended? Describe','termination_history','textarea']] },
   ]},
   { category: 'Subdivision', icon: 'grid-3x3', forms: [
     { code: 'PPL', name: 'Preliminary Plat Application', fee: 0, permit: true, pdf: `${TF_URL}/Preliminary_Plat_Application.pdf` },
@@ -58,6 +68,7 @@ const FORM_CATALOG = [
     { code: 'SDS', name: 'Standards for Design & Construction', pdfOnly: true, pdf: `${TF_URL}/ThreeForksDsnStds_20230411__version_2___1_.pdf` },
     { code: 'SRG', name: 'Subdivision Regulations', pdfOnly: true, pdf: `${TF_URL}/City_of_Three_Forks_Subdivision_Regs_OCR.pdf` },
     { code: 'FFC', name: 'FEMA Floodproofing Certificate', pdfOnly: true, pdf: `${TF_URL}/FEMA_Form_FF-206-FY-22-153_floodproofing_nonresidential.pdf` },
+    { code: 'GRP', name: 'Growth Policy (Envision Three Forks)', pdfOnly: true, pdf: `${TF_URL}/FINAL_ADOPTED_220913_EnvisionThreeForks_AdoptedDocument_LowRes__1_.pdf` },
   ]},
 ];
 
