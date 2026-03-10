@@ -33,8 +33,14 @@ const DEFAULT_PERMIT_TYPES = [
   { code: 'FP', name: 'Floodplain Permit', base_fee: 500 },
   { code: 'CUP', name: 'Conditional Use Permit', base_fee: 500 },
   { code: 'VAR', name: 'Variance', base_fee: 500 },
-  { code: 'SUB', name: 'Subdivision', base_fee: 500 },
+  { code: 'SUB', name: 'Exemption from Subdivision Review', base_fee: 500 },
   { code: 'WSC', name: 'Water/Sewer Connection', base_fee: 250 },
+  { code: 'ZCA', name: 'Zone Change / Amend Zoning Code', base_fee: 350 },
+  { code: 'FPV', name: 'Floodplain Variance', base_fee: 350 },
+  { code: 'PPL', name: 'Preliminary Plat Application', base_fee: 500 },
+  { code: 'FPL', name: 'Final Plat Application', base_fee: 300 },
+  { code: 'ANX', name: 'Annexation Application', base_fee: 500 },
+  { code: 'VAC', name: 'Petition to Vacate/Abandon', base_fee: 250 },
 ];
 
 const SAMPLE_PARCELS = {
@@ -99,7 +105,13 @@ const api = {
   getRequestCategories: () => api.request('/api/request-categories'),
   getRequestsMap: () => api.request('/api/requests/map'),
   lookupApplication: (number, email) => api.request(`/api/lookup?number=${encodeURIComponent(number)}${email ? '&email=' + encodeURIComponent(email) : ''}`),
+  submitForm: (data) => api.request('/api/forms', { method: 'POST', body: JSON.stringify(data) }),
+  getForms: (params = {}) => { const qs = new URLSearchParams(params).toString(); return api.request(`/api/forms${qs ? '?' + qs : ''}`); },
 };
+
+// Hash-based SPA routing
+function getHashRoute() { return (window.location.hash || '#/').replace('#', ''); }
+function setHashRoute(route) { window.history.pushState(null, '', '#' + route); }
 
 function transformPermit(p) {
   return {

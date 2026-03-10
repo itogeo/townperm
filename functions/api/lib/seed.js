@@ -19,8 +19,14 @@ INSERT OR IGNORE INTO permit_types (code, name, description, base_fee, requires_
   ('FP', 'Floodplain Permit', 'Required for any improvement in FEMA AE flood zone', 500.00, 1, 21),
   ('CUP', 'Conditional Use Permit', 'Conditional use in zoning district', 500.00, 0, 30),
   ('VAR', 'Variance', 'Variance from zoning regulations', 500.00, 0, 30),
-  ('SUB', 'Subdivision', 'Minor or major subdivision plat approval', 500.00, 0, 30),
-  ('WSC', 'Water/Sewer Connection', 'New water and sewer service connection', 250.00, 1, 14);
+  ('SUB', 'Exemption from Subdivision Review', 'Exemption from subdivision review application', 500.00, 0, 30),
+  ('WSC', 'Water/Sewer Connection', 'New water and sewer service connection', 250.00, 1, 14),
+  ('ZCA', 'Zone Change / Amend Zoning Code', 'Application to amend zoning code or change zone', 350.00, 0, 30),
+  ('FPV', 'Floodplain Variance', 'Variance from floodplain regulations', 350.00, 0, 30),
+  ('PPL', 'Preliminary Plat Application', 'Subdivision preliminary plat review', 500.00, 0, 60),
+  ('FPL', 'Final Plat Application', 'Subdivision final plat approval', 300.00, 0, 30),
+  ('ANX', 'Annexation Application', 'Petition for annexation into city limits', 500.00, 0, 60),
+  ('VAC', 'Petition to Vacate/Abandon', 'Petition to vacate or abandon street or alley', 250.00, 0, 30);
 
 -- License types
 INSERT OR IGNORE INTO license_types (code, name, description, annual_fee, requires_inspection, renewal_month) VALUES

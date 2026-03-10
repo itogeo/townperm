@@ -60,7 +60,7 @@
   <script>
     // Load JS files in order, concatenate, then Babel-compile as one unit
     (async () => {
-      const files = ['/js/shared.js', '/js/map.js', '/js/public.js', '/js/staff.js', '/js/app.js'];
+      const files = ['/js/shared.js', '/js/map.js', '/js/forms.js', '/js/public.js', '/js/staff.js', '/js/app.js'];
       const sources = await Promise.all(files.map(f => fetch(f).then(r => r.text())));
       const combined = sources.join('\n;\n');
       const compiled = Babel.transform(combined, { presets: ['react'] }).code;

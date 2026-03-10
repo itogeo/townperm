@@ -226,6 +226,11 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
     building_height_residential: '', building_height_commercial: '', building_height_accessory: '',
     connection_type: '', structure_type: '', connect_date: '', line_size: '', line_length: '', sewer_grade: '', contractor_insurance: '',
     after_the_fact: false, corner_pins: '',
+    proposed_zoning: '', zone_change_reason: '', proposed_use: '', base_flood_elevation: '', proposed_development: '', variance_reason: '',
+    num_lots: '', min_lot_size: '', water_supply_type: '', wastewater_type: '', current_land_use: '', groundwater_depth: '', bedrock_depth: '',
+    preliminary_plat_date: '', improvements_installed: '', materials_submitted: '', occupation: '', parcel_history: '',
+    exemption_type: '', exemption_reason: '', intended_use: '', contiguous: '', include_rows: '', existing_structures: '',
+    abutting_owners: '', all_consent: '', abandonment_reason: '', public_access: '', utilities_present: '',
   };
   const draft = loadDraft();
   const [form, setForm] = useState(draft ? { ...defaultForm, ...draft } : defaultForm);
@@ -248,6 +253,7 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
   const isVariance = form.permit_type_code === 'VAR';
   const isFloodplain = form.permit_type_code === 'FP';
   const isWSC = form.permit_type_code === 'WSC';
+  const hasExtraFields = EXTRA_PERMIT_FIELDS[form.permit_type_code];
   const inp = "w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 outline-none";
   const section = "border-t pt-5 mt-6";
   const F = (label, field, props = {}) => (<div className={props.cls}><label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
@@ -256,7 +262,7 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
     : <input type={props.t||'text'} value={form[field]} onChange={e => update(field, e.target.value)} placeholder={props.ph} className={`${inp} ${props.mono?'font-mono':''}`} style={props.big ? {fontSize:'16px'} : {}} />}</div>);
   const sectionHead = (icon, title, desc) => (<div className="flex items-center gap-3 mb-4"><div className="w-9 h-9 bg-sky-100 rounded-lg flex items-center justify-center flex-shrink-0"><Icon name={icon} size={18} className="text-sky-700" /></div><div><h4 className="font-semibold text-gray-900">{title}</h4>{desc && <p className="text-xs text-gray-500">{desc}</p>}</div></div>);
 
-  const canSubmit = !!form.address && !!form.applicant_name && !!form.description && agreed;
+  const canSubmit = hasExtraFields ? !!form.applicant_name && !!form.description && agreed : !!form.address && !!form.applicant_name && !!form.description && agreed;
 
   const handleSubmit = async () => {
     if (demoMode) { toast('Demo mode — application not saved', 'warning'); onClose(); return; }
@@ -308,8 +314,11 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
             </div>
           )}
 
-          {/* 2. Subject Property */}
-          <div className={section}>
+          {/* Extra permit type fields (ZCA, PPL, FPL, SUB, ANX, VAC) */}
+          {hasExtraFields && <div className={section}>{sectionHead('clipboard-list', selectedType?.name || 'Application Details')}{hasExtraFields(F, form)}</div>}
+
+          {/* 2-6. Standard permit type sections (hidden for extra types) */}
+          {!hasExtraFields && <><div className={section}>
             {sectionHead('map-pin', 'Subject Property', 'Property address and legal description where work will occur.')}
             <div className="space-y-3">
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Site Address *</label><input type="text" value={form.address} onChange={e => update('address', e.target.value)} placeholder="e.g. 121 E Jefferson St" className={inp} style={{fontSize:'16px'}} /></div>
@@ -421,7 +430,7 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Developer Phone</label><input type="tel" value={form.developer_phone} onChange={e => update('developer_phone', e.target.value)} className={inp} /></div>
               </div>)}
             </div>
-          </div>
+          </div></>}
 
           {/* 7. Attachments */}
           <div className={section}>
@@ -474,143 +483,6 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
   );
 };
 
-// ---------- Construction Map ----------
-const CONSTRUCTION_COLORS = { approved: '#f59e0b', completed: '#059669' };
-const ConstructionMap = ({ config, permits, parcels, onBack }) => {
-  const [filter, setFilter] = useState('all');
-  const [selectedProject, setSelectedProject] = useState(null);
-  const mapContainer = useRef(null);
-  const map = useRef(null);
-  const popup = useRef(null);
-  const [loaded, setLoaded] = useState(false);
-
-  const projects = useMemo(() =>
-    permits.filter(p => (p.status === 'approved' || p.status === 'completed') && p.coords)
-      .filter(p => filter === 'all' || p.status === filter),
-  [permits, filter]);
-
-  const geoJSON = useMemo(() => ({
-    type: 'FeatureCollection',
-    features: projects.map(p => ({
-      type: 'Feature',
-      properties: { id: p.id, status: p.status, address: p.address, type: p.type, applicant: p.applicant, valuation: p.valuation || 0, description: p.description || '', submitted: p.submitted || '' },
-      geometry: { type: 'Point', coordinates: p.coords },
-    })),
-  }), [projects]);
-
-  useEffect(() => {
-    if (map.current || !config.mapboxToken) return;
-    mapboxgl.accessToken = config.mapboxToken;
-    map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/light-v11', center: config.mapCenter, zoom: config.mapZoom });
-    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
-    map.current.on('load', () => {
-      map.current.addSource('construction', { type: 'geojson', data: geoJSON });
-      map.current.addLayer({ id: 'construction-glow', type: 'circle', source: 'construction', paint: {
-        'circle-radius': 22, 'circle-opacity': 0.15,
-        'circle-color': ['match', ['get', 'status'], 'approved', CONSTRUCTION_COLORS.approved, 'completed', CONSTRUCTION_COLORS.completed, '#6b7280'],
-      }});
-      map.current.addLayer({ id: 'construction-markers', type: 'circle', source: 'construction', paint: {
-        'circle-radius': 10, 'circle-stroke-width': 3, 'circle-stroke-color': '#ffffff',
-        'circle-color': ['match', ['get', 'status'], 'approved', CONSTRUCTION_COLORS.approved, 'completed', CONSTRUCTION_COLORS.completed, '#6b7280'],
-      }});
-      map.current.addLayer({ id: 'construction-labels', type: 'symbol', source: 'construction', layout: {
-        'text-field': ['match', ['get', 'status'], 'approved', '🔨', '✓'], 'text-size': 12, 'text-allow-overlap': true,
-      }});
-      map.current.on('click', 'construction-markers', (e) => {
-        const f = e.features[0].properties;
-        setSelectedProject(projects.find(p => p.id === f.id) || null);
-      });
-      map.current.on('mouseenter', 'construction-markers', (e) => {
-        map.current.getCanvas().style.cursor = 'pointer';
-        const f = e.features[0];
-        const color = CONSTRUCTION_COLORS[f.properties.status] || '#6b7280';
-        popup.current = new mapboxgl.Popup({ closeButton: false, offset: 14 })
-          .setLngLat(f.geometry.coordinates)
-          .setHTML(`<div style="padding:10px 14px;min-width:180px"><div style="font-weight:700;font-size:13px">${f.properties.address}</div><div style="font-size:12px;color:#555;margin:4px 0">${f.properties.type}</div><div style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;background:${color}20;color:${color}">${f.properties.status === 'approved' ? 'Under Construction' : 'Completed'}</div></div>`)
-          .addTo(map.current);
-      });
-      map.current.on('mouseleave', 'construction-markers', () => {
-        map.current.getCanvas().style.cursor = '';
-        if (popup.current) { popup.current.remove(); popup.current = null; }
-      });
-      setLoaded(true);
-    });
-    return () => { if (map.current) { map.current.remove(); map.current = null; } };
-  }, [config.mapboxToken]);
-
-  useEffect(() => { if (loaded && map.current?.getSource('construction')) map.current.getSource('construction').setData(geoJSON); }, [loaded, geoJSON]);
-
-  const activeCount = permits.filter(p => p.status === 'approved' && p.coords).length;
-  const completedCount = permits.filter(p => p.status === 'completed' && p.coords).length;
-
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white border-b shadow-sm sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={onBack} className="flex items-center gap-1.5 text-sky-700 hover:text-sky-800 text-sm font-medium"><Icon name="arrow-left" size={16} /> Back</button>
-            <div className="h-5 w-px bg-gray-200" />
-            <h1 className="text-lg font-bold text-gray-900">Construction Activity Map</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            {[{v:'all',l:'All Projects',ct:activeCount+completedCount},{v:'approved',l:'Active',ct:activeCount,c:'bg-amber-100 text-amber-800'},{v:'completed',l:'Completed',ct:completedCount,c:'bg-emerald-100 text-emerald-800'}].map(f => (
-              <button key={f.v} onClick={() => setFilter(f.v)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${filter===f.v ? (f.c||'bg-sky-100 text-sky-800') : 'text-gray-500 hover:bg-gray-100'}`}>
-                {f.l} ({f.ct})
-              </button>
-            ))}
-          </div>
-        </div>
-      </header>
-      <div className="flex-1 relative" style={{ minHeight: 'calc(100vh - 56px)' }}>
-        <div ref={mapContainer} className="absolute inset-0" />
-        {/* Legend */}
-        <div className="absolute bottom-6 left-4 bg-white/95 backdrop-blur rounded-xl shadow-lg p-3 text-xs border z-10">
-          <p className="font-bold text-gray-800 mb-2 text-[11px] uppercase tracking-wider">Construction Status</p>
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full border-2 border-white shadow" style={{backgroundColor:CONSTRUCTION_COLORS.approved}} /><span className="text-gray-700 font-medium">Active Construction</span></div>
-            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full border-2 border-white shadow" style={{backgroundColor:CONSTRUCTION_COLORS.completed}} /><span className="text-gray-700 font-medium">Completed</span></div>
-          </div>
-        </div>
-        {/* Project detail card */}
-        {selectedProject && (
-          <div className="absolute top-4 right-4 bg-white rounded-xl shadow-xl border w-80 z-20 overflow-hidden">
-            <div className={`px-4 py-3 ${selectedProject.status === 'approved' ? 'bg-amber-50 border-b border-amber-100' : 'bg-emerald-50 border-b border-emerald-100'}`}>
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-gray-900">{selectedProject.id}</span>
-                <button onClick={() => setSelectedProject(null)} className="text-gray-400 hover:text-gray-600"><Icon name="x" size={16} /></button>
-              </div>
-              <StatusBadge status={selectedProject.status} />
-            </div>
-            <div className="p-4 space-y-3 text-sm">
-              <div><div className="text-[10px] text-gray-400 uppercase font-semibold">Address</div><div className="font-medium">{selectedProject.address}</div></div>
-              <div><div className="text-[10px] text-gray-400 uppercase font-semibold">Project Type</div><div className="font-medium">{selectedProject.type}</div></div>
-              <div><div className="text-[10px] text-gray-400 uppercase font-semibold">Applicant</div><div className="text-gray-600">{selectedProject.applicant}</div></div>
-              {selectedProject.valuation > 0 && <div><div className="text-[10px] text-gray-400 uppercase font-semibold">Project Value</div><div className="font-medium">${Number(selectedProject.valuation).toLocaleString()}</div></div>}
-              {selectedProject.description && <div><div className="text-[10px] text-gray-400 uppercase font-semibold">Description</div><div className="text-gray-600 text-xs leading-relaxed">{selectedProject.description}</div></div>}
-              {selectedProject.submitted && <div><div className="text-[10px] text-gray-400 uppercase font-semibold">Submitted</div><div className="text-gray-500 text-xs">{selectedProject.submitted}</div></div>}
-            </div>
-          </div>
-        )}
-        {/* Stats bar */}
-        <div className="absolute top-4 left-4 flex gap-2 z-10">
-          <div className="bg-white/95 backdrop-blur rounded-lg shadow px-3 py-2 text-center border">
-            <div className="text-lg font-bold text-amber-600">{activeCount}</div>
-            <div className="text-[10px] text-gray-500 font-medium">Active</div>
-          </div>
-          <div className="bg-white/95 backdrop-blur rounded-lg shadow px-3 py-2 text-center border">
-            <div className="text-lg font-bold text-emerald-600">{completedCount}</div>
-            <div className="text-[10px] text-gray-500 font-medium">Completed</div>
-          </div>
-          <div className="bg-white/95 backdrop-blur rounded-lg shadow px-3 py-2 text-center border">
-            <div className="text-lg font-bold text-sky-600">${permits.filter(p => p.status === 'approved' && p.coords).reduce((s, p) => s + (p.valuation || 0), 0).toLocaleString()}</div>
-            <div className="text-[10px] text-gray-500 font-medium">Active Value</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // ---------- Public Portal ----------
 const PublicPortal = ({ config, permits, parcels, permitTypes, demoMode, onStaffLogin, onRefresh }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -619,12 +491,29 @@ const PublicPortal = ({ config, permits, parcels, permitTypes, demoMode, onStaff
   const [newPermitType, setNewPermitType] = useState(null);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [showParkModal, setShowParkModal] = useState(false);
-  const [showConstructionMap, setShowConstructionMap] = useState(false);
+  const initHash = getHashRoute();
+  const [showConstructionMap, setShowConstructionMap] = useState(initHash === '/construction-map');
   const [showLookup, setShowLookup] = useState(false);
+  const [showFormsDir, setShowFormsDir] = useState(initHash === '/forms');
+  const [genericForm, setGenericForm] = useState(null);
   const toast = useToast();
 
+  // Sync hash route on navigation
+  useEffect(() => {
+    const handler = () => {
+      const h = getHashRoute();
+      setShowConstructionMap(h === '/construction-map');
+      setShowFormsDir(h === '/forms');
+    };
+    window.addEventListener('hashchange', handler);
+    return () => window.removeEventListener('hashchange', handler);
+  }, []);
+
   if (showConstructionMap) {
-    return <ConstructionMap config={config} permits={permits} parcels={parcels} onBack={() => setShowConstructionMap(false)} />;
+    return <ConstructionMap config={config} permits={permits} parcels={parcels} onBack={() => { setShowConstructionMap(false); setHashRoute('/'); }} />;
+  }
+  if (showFormsDir) {
+    return <FormsDirectory config={config} onBack={() => { setShowFormsDir(false); setHashRoute('/'); }} onOpenForm={f => { setShowFormsDir(false); setHashRoute('/'); setGenericForm(f); }} onOpenPermit={code => { setShowFormsDir(false); setHashRoute('/'); openPermitForm(code); }} />;
   }
 
   const openPermitForm = (typeCode) => { setNewPermitType(typeCode || null); setShowNewPermit(true); };
@@ -656,7 +545,8 @@ const PublicPortal = ({ config, permits, parcels, permitTypes, demoMode, onStaff
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => setShowConstructionMap(true)} className="hidden md:flex text-gray-500 hover:text-amber-700 px-3 py-2 rounded-lg text-sm items-center gap-1.5 transition hover:bg-amber-50 font-medium" style={{touchAction:'manipulation'}}><Icon name="hard-hat" size={15} /> Construction Map</button>
+            <button onClick={() => { setShowFormsDir(true); setHashRoute('/forms'); }} className="hidden md:flex text-gray-500 hover:text-sky-700 px-3 py-2 rounded-lg text-sm items-center gap-1.5 transition hover:bg-sky-50 font-medium" style={{touchAction:'manipulation'}}><Icon name="file-text" size={15} /> Forms</button>
+            <button onClick={() => { setShowConstructionMap(true); setHashRoute('/construction-map'); }} className="hidden md:flex text-gray-500 hover:text-amber-700 px-3 py-2 rounded-lg text-sm items-center gap-1.5 transition hover:bg-amber-50 font-medium" style={{touchAction:'manipulation'}}><Icon name="hard-hat" size={15} /> Construction Map</button>
             <button onClick={() => setShowRequestModal(true)} className="hidden md:flex text-gray-500 hover:text-orange-600 px-3 py-2 rounded-lg text-sm items-center gap-1.5 transition hover:bg-orange-50" style={{touchAction:'manipulation'}}><Icon name="alert-triangle" size={15} /> Report Issue</button>
             <button onClick={() => openPermitForm(null)} className="bg-sky-700 hover:bg-sky-800 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition shadow-sm" style={{touchAction:'manipulation'}}><Icon name="file-plus" size={16} /> <span className="hidden sm:inline">Apply for a Permit</span><span className="sm:hidden">Apply</span></button>
             <button onClick={onStaffLogin} className="text-gray-400 hover:text-gray-600 px-2.5 py-2 rounded-lg text-sm flex items-center gap-1 transition"><Icon name="lock" size={14} /></button>
@@ -737,12 +627,13 @@ const PublicPortal = ({ config, permits, parcels, permitTypes, demoMode, onStaff
 
       {/* Quick Action Cards */}
       <div className="max-w-5xl mx-auto px-4 pt-8 pb-6 w-full">
-        <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-5">
+        <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5">
           {[
-            { title: 'Apply for a Permit', desc: 'Submit a zoning, CUP, floodplain, or variance application online.', icon: 'file-plus', color: 'sky', action: () => openPermitForm(null), cta: 'Start Application' },
-            { title: 'Check Application Status', desc: 'Look up the status of your permit, license, reservation, or request.', icon: 'search', color: 'emerald', action: () => setShowLookup(true), cta: 'Track Application' },
-            { title: 'Report an Issue', desc: 'Report a code violation, pothole, water issue, or other concern.', icon: 'alert-triangle', color: 'orange', action: () => setShowRequestModal(true), cta: 'File Report' },
-            { title: 'Reserve a Park', desc: 'Book a pavilion, field, or facility for your event or gathering.', icon: 'trees', color: 'violet', action: () => setShowParkModal(true), cta: 'Reserve Now' },
+            { title: 'Forms & Applications', desc: 'All city forms — permits, water/sewer, zoning, subdivision, and more.', icon: 'file-text', color: 'sky', action: () => { setShowFormsDir(true); setHashRoute('/forms'); }, cta: 'Browse All Forms' },
+            { title: 'Apply for a Permit', desc: 'Submit a zoning, CUP, floodplain, or other permit application.', icon: 'file-plus', color: 'indigo', action: () => openPermitForm(null), cta: 'Start Application' },
+            { title: 'Check Status', desc: 'Look up the status of your permit, license, or request.', icon: 'search', color: 'emerald', action: () => setShowLookup(true), cta: 'Track Application' },
+            { title: 'Report an Issue', desc: 'Report a code violation, pothole, or other concern.', icon: 'alert-triangle', color: 'orange', action: () => setShowRequestModal(true), cta: 'File Report' },
+            { title: 'Reserve a Park', desc: 'Book a pavilion, field, or facility for your event.', icon: 'trees', color: 'violet', action: () => setShowParkModal(true), cta: 'Reserve Now' },
           ].map((card, i) => (
             <div key={i} onClick={card.action} className={`fade-up bg-white rounded-2xl border shadow-sm p-6 hover:shadow-lg hover:border-${card.color}-300 hover:-translate-y-0.5 transition-all cursor-pointer group`} style={{touchAction:'manipulation'}}>
               <div className={`bg-gradient-to-br from-${card.color}-100 to-${card.color}-200 rounded-xl flex items-center justify-center mb-4 group-hover:scale-105 transition-transform`} style={{width:'52px',height:'52px'}}>
@@ -873,6 +764,7 @@ const PublicPortal = ({ config, permits, parcels, permitTypes, demoMode, onStaff
       {showRequestModal && <CitizenRequestModal onClose={() => setShowRequestModal(false)} onCreated={onRefresh} />}
       {showParkModal && <ParkReservationModal onClose={() => setShowParkModal(false)} onCreated={onRefresh} />}
       {showLookup && <ApplicationLookupModal onClose={() => setShowLookup(false)} />}
+      {genericForm && <GenericFormModal formDef={genericForm} onClose={() => setGenericForm(null)} />}
     </div>
   );
 };
@@ -895,7 +787,7 @@ const ApplicationLookupModal = ({ onClose }) => {
     setLoading(false);
   };
 
-  const typeLabels = { permit: 'Permit', license: 'Business License', reservation: 'Park Reservation', request: 'Citizen Request' };
+  const typeLabels = { permit: 'Permit', license: 'Business License', reservation: 'Park Reservation', request: 'Citizen Request', form: 'Form Submission' };
   const typeIcons = { permit: 'file-text', license: 'badge', reservation: 'trees', request: 'message-circle' };
 
   return (

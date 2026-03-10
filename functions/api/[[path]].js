@@ -107,6 +107,27 @@ export async function onRequest(context) {
     }
 
     // ==================================================================
+    // GENERIC FORMS — /forms (dog, chicken, board, traffic, security, etc.)
+    // ==================================================================
+    if (path.startsWith('/forms')) {
+      if (method === 'POST' && path === '/forms') {
+        const body = await request.json();
+        if (!body.form_type || !body.data) return json({ error: 'form_type and data required' }, 400);
+        const num = 'GF-' + Date.now().toString(36).toUpperCase();
+        await db.prepare('INSERT INTO form_submissions (submission_number, form_type, form_name, data, submitted_at) VALUES (?, ?, ?, ?, datetime("now"))').bind(num, body.form_type, body.form_name || body.form_type, JSON.stringify(body.data)).run();
+        return json({ submission_number: num, message: 'Form submitted successfully' }, 201);
+      }
+      if (method === 'GET' && path === '/forms') {
+        const user = await getUser(request, db);
+        if (!user) return json({ error: 'Unauthorized' }, 401);
+        const type = url.searchParams.get('type');
+        const q = type ? await db.prepare('SELECT * FROM form_submissions WHERE form_type = ? ORDER BY submitted_at DESC').bind(type).all()
+          : await db.prepare('SELECT * FROM form_submissions ORDER BY submitted_at DESC LIMIT 200').all();
+        return json(q.results.map(r => ({ ...r, data: JSON.parse(r.data || '{}') })));
+      }
+    }
+
+    // ==================================================================
     // PUBLIC LOOKUP — check application status by tracking number
     // ==================================================================
     if (method === 'GET' && path === '/lookup') {
@@ -117,7 +138,7 @@ export async function onRequest(context) {
       let result = null, type = null;
 
       // Detect type from prefix and search appropriate table
-      if (number.startsWith('ZP-') || number.startsWith('FP-') || number.startsWith('CUP-') || number.startsWith('VAR-') || number.startsWith('SUB-') || number.startsWith('WSC-')) {
+      if (number.startsWith('ZP-') || number.startsWith('FP-') || number.startsWith('CUP-') || number.startsWith('VAR-') || number.startsWith('SUB-') || number.startsWith('WSC-') || number.startsWith('ZCA-') || number.startsWith('FPV-') || number.startsWith('PPL-') || number.startsWith('FPL-') || number.startsWith('ANX-') || number.startsWith('VAC-')) {
         const row = await db.prepare(`SELECT p.permit_number, p.status, p.address, p.applicant_name, p.applicant_email, p.submitted_at, p.decision_date, p.conditions, p.denial_reason, p.fees_calculated, p.fees_paid, pt.name as type_name FROM permits p JOIN permit_types pt ON p.permit_type_id = pt.id WHERE UPPER(p.permit_number) = ?`).bind(number).first();
         if (row) { result = row; type = 'permit'; }
       } else if (number.startsWith('BL-')) {
@@ -129,6 +150,9 @@ export async function onRequest(context) {
       } else if (number.startsWith('CR-')) {
         const row = await db.prepare(`SELECT cr.request_number, cr.status, cr.address, cr.description, cr.reporter_name, cr.reporter_email, cr.created_at, cr.resolved_at, cr.resolution, rc.name as category_name FROM citizen_requests cr JOIN request_categories rc ON cr.category_id = rc.id WHERE UPPER(cr.request_number) = ?`).bind(number).first();
         if (row) { result = row; type = 'request'; }
+      } else if (number.startsWith('GF-')) {
+        const row = await db.prepare(`SELECT submission_number, form_type, form_name, status, submitted_at, reviewed_at, staff_notes FROM form_submissions WHERE UPPER(submission_number) = ?`).bind(number).first();
+        if (row) { result = row; type = 'form'; }
       }
 
       if (!result) return json({ error: 'No application found with that tracking number' }, 404);

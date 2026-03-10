@@ -193,6 +193,53 @@ export async function ensureDB(db) {
   for (const sql of colMigrations) {
     try { await db.exec(sql); } catch {}
   }
+  // Ensure form_submissions table exists
+  try {
+    await db.exec("CREATE TABLE IF NOT EXISTS form_submissions (id INTEGER PRIMARY KEY AUTOINCREMENT, submission_number TEXT UNIQUE NOT NULL, form_type TEXT NOT NULL, form_name TEXT, data TEXT, status TEXT DEFAULT 'received', staff_notes TEXT, submitted_at TEXT DEFAULT (datetime('now')), reviewed_at TEXT, reviewed_by INTEGER REFERENCES users(id))");
+  } catch {}
+  // Add new permit columns for subdivision/annexation/zone change fields
+  const extraCols = [
+    "ALTER TABLE permits ADD COLUMN proposed_zoning TEXT",
+    "ALTER TABLE permits ADD COLUMN zone_change_reason TEXT",
+    "ALTER TABLE permits ADD COLUMN proposed_use TEXT",
+    "ALTER TABLE permits ADD COLUMN base_flood_elevation TEXT",
+    "ALTER TABLE permits ADD COLUMN proposed_development TEXT",
+    "ALTER TABLE permits ADD COLUMN variance_reason TEXT",
+    "ALTER TABLE permits ADD COLUMN num_lots TEXT",
+    "ALTER TABLE permits ADD COLUMN min_lot_size TEXT",
+    "ALTER TABLE permits ADD COLUMN water_supply_type TEXT",
+    "ALTER TABLE permits ADD COLUMN wastewater_type TEXT",
+    "ALTER TABLE permits ADD COLUMN current_land_use TEXT",
+    "ALTER TABLE permits ADD COLUMN groundwater_depth TEXT",
+    "ALTER TABLE permits ADD COLUMN bedrock_depth TEXT",
+    "ALTER TABLE permits ADD COLUMN preliminary_plat_date TEXT",
+    "ALTER TABLE permits ADD COLUMN improvements_installed TEXT",
+    "ALTER TABLE permits ADD COLUMN materials_submitted TEXT",
+    "ALTER TABLE permits ADD COLUMN occupation TEXT",
+    "ALTER TABLE permits ADD COLUMN parcel_history TEXT",
+    "ALTER TABLE permits ADD COLUMN exemption_type TEXT",
+    "ALTER TABLE permits ADD COLUMN exemption_reason TEXT",
+    "ALTER TABLE permits ADD COLUMN intended_use TEXT",
+    "ALTER TABLE permits ADD COLUMN contiguous TEXT",
+    "ALTER TABLE permits ADD COLUMN include_rows TEXT",
+    "ALTER TABLE permits ADD COLUMN existing_structures TEXT",
+    "ALTER TABLE permits ADD COLUMN abutting_owners TEXT",
+    "ALTER TABLE permits ADD COLUMN all_consent TEXT",
+    "ALTER TABLE permits ADD COLUMN abandonment_reason TEXT",
+    "ALTER TABLE permits ADD COLUMN public_access TEXT",
+    "ALTER TABLE permits ADD COLUMN utilities_present TEXT",
+  ];
+  for (const sql of extraCols) { try { await db.exec(sql); } catch {} }
+  // Seed new permit types
+  const newTypes = [
+    "INSERT OR IGNORE INTO permit_types (code, name, description, base_fee, requires_inspection, review_days) VALUES ('ZCA', 'Zone Change / Amend Zoning Code', 'Application to amend zoning code or change zone', 350.00, 0, 30)",
+    "INSERT OR IGNORE INTO permit_types (code, name, description, base_fee, requires_inspection, review_days) VALUES ('FPV', 'Floodplain Variance', 'Variance from floodplain regulations', 350.00, 0, 30)",
+    "INSERT OR IGNORE INTO permit_types (code, name, description, base_fee, requires_inspection, review_days) VALUES ('PPL', 'Preliminary Plat Application', 'Subdivision preliminary plat review', 500.00, 0, 60)",
+    "INSERT OR IGNORE INTO permit_types (code, name, description, base_fee, requires_inspection, review_days) VALUES ('FPL', 'Final Plat Application', 'Subdivision final plat approval', 300.00, 0, 30)",
+    "INSERT OR IGNORE INTO permit_types (code, name, description, base_fee, requires_inspection, review_days) VALUES ('ANX', 'Annexation Application', 'Petition for annexation into city limits', 500.00, 0, 60)",
+    "INSERT OR IGNORE INTO permit_types (code, name, description, base_fee, requires_inspection, review_days) VALUES ('VAC', 'Petition to Vacate/Abandon', 'Petition to vacate or abandon street or alley', 250.00, 0, 30)",
+  ];
+  for (const sql of newTypes) { try { await db.exec(sql); } catch {} }
   // Clean up expired sessions (fire and forget)
   db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')").run().catch(() => {});
   _dbReady = true;

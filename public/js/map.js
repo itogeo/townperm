@@ -271,3 +271,160 @@ const PermitMap = ({ permits, parcels, selectedPermit, onPermitClick, onParcelCl
     </div>
   );
 };
+
+// ---------- Construction Map ----------
+const CONSTRUCTION_COLORS = { approved: '#f59e0b', completed: '#059669' };
+const ConstructionMap = ({ config, permits, parcels, onBack }) => {
+  const [filter, setFilter] = useState('all');
+  const [selectedProject, setSelectedProject] = useState(null);
+  const mapContainer = useRef(null);
+  const map = useRef(null);
+  const popup = useRef(null);
+  const [loaded, setLoaded] = useState(false);
+  const [mapError, setMapError] = useState(null);
+
+  const projects = useMemo(() =>
+    permits.filter(p => (p.status === 'approved' || p.status === 'completed') && p.coords)
+      .filter(p => filter === 'all' || p.status === filter),
+  [permits, filter]);
+
+  const geoJSON = useMemo(() => ({
+    type: 'FeatureCollection',
+    features: projects.map(p => ({
+      type: 'Feature',
+      properties: { id: p.id, status: p.status, address: p.address, type: p.type, applicant: p.applicant, valuation: p.valuation || 0, description: p.description || '', submitted: p.submitted || '' },
+      geometry: { type: 'Point', coordinates: p.coords },
+    })),
+  }), [projects]);
+
+  useEffect(() => {
+    if (map.current) return;
+    if (!config.mapboxToken) { setMapError('Map configuration not available. Please try again later.'); return; }
+    try {
+    mapboxgl.accessToken = config.mapboxToken;
+    map.current = new mapboxgl.Map({ container: mapContainer.current, style: 'mapbox://styles/mapbox/light-v11', center: config.mapCenter, zoom: config.mapZoom });
+    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    map.current.on('error', (e) => { if (!loaded) setMapError('Map failed to load. Check your connection.'); });
+    map.current.on('load', () => {
+      map.current.addSource('construction', { type: 'geojson', data: geoJSON });
+      map.current.addLayer({ id: 'construction-glow', type: 'circle', source: 'construction', paint: {
+        'circle-radius': 22, 'circle-opacity': 0.15,
+        'circle-color': ['match', ['get', 'status'], 'approved', CONSTRUCTION_COLORS.approved, 'completed', CONSTRUCTION_COLORS.completed, '#6b7280'],
+      }});
+      map.current.addLayer({ id: 'construction-markers', type: 'circle', source: 'construction', paint: {
+        'circle-radius': 10, 'circle-stroke-width': 3, 'circle-stroke-color': '#ffffff',
+        'circle-color': ['match', ['get', 'status'], 'approved', CONSTRUCTION_COLORS.approved, 'completed', CONSTRUCTION_COLORS.completed, '#6b7280'],
+      }});
+      map.current.addLayer({ id: 'construction-labels', type: 'symbol', source: 'construction', layout: {
+        'text-field': ['match', ['get', 'status'], 'approved', '🔨', '✓'], 'text-size': 12, 'text-allow-overlap': true,
+      }});
+      map.current.on('click', 'construction-markers', (e) => {
+        const f = e.features[0].properties;
+        setSelectedProject(projects.find(p => p.id === f.id) || null);
+      });
+      map.current.on('mouseenter', 'construction-markers', (e) => {
+        map.current.getCanvas().style.cursor = 'pointer';
+        const f = e.features[0];
+        const color = CONSTRUCTION_COLORS[f.properties.status] || '#6b7280';
+        popup.current = new mapboxgl.Popup({ closeButton: false, offset: 14 })
+          .setLngLat(f.geometry.coordinates)
+          .setHTML(`<div style="padding:10px 14px;min-width:180px"><div style="font-weight:700;font-size:13px">${f.properties.address}</div><div style="font-size:12px;color:#555;margin:4px 0">${f.properties.type}</div><div style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;background:${color}20;color:${color}">${f.properties.status === 'approved' ? 'Under Construction' : 'Completed'}</div></div>`)
+          .addTo(map.current);
+      });
+      map.current.on('mouseleave', 'construction-markers', () => {
+        map.current.getCanvas().style.cursor = '';
+        if (popup.current) { popup.current.remove(); popup.current = null; }
+      });
+      setLoaded(true);
+    });
+    return () => { if (map.current) { map.current.remove(); map.current = null; } };
+    } catch (err) { setMapError('Failed to initialize map: ' + (err.message || 'Unknown error')); }
+  }, [config.mapboxToken]);
+
+  useEffect(() => { if (loaded && map.current?.getSource('construction')) map.current.getSource('construction').setData(geoJSON); }, [loaded, geoJSON]);
+
+  const activeCount = permits.filter(p => p.status === 'approved' && p.coords).length;
+  const completedCount = permits.filter(p => p.status === 'completed' && p.coords).length;
+
+  if (mapError) return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <header className="bg-white border-b shadow-sm sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center gap-3">
+          <button onClick={onBack} className="flex items-center gap-1.5 text-sky-700 hover:text-sky-800 text-sm font-medium"><Icon name="arrow-left" size={16} /> Back</button>
+          <div className="h-5 w-px bg-gray-200" /><h1 className="text-lg font-bold text-gray-900">Construction Activity Map</h1>
+        </div>
+      </header>
+      <div className="flex-1 flex items-center justify-center p-8">
+        <div className="text-center max-w-md"><div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4"><Icon name="alert-triangle" size={28} className="text-amber-600" /></div>
+          <h3 className="text-lg font-bold text-gray-900 mb-2">Map Unavailable</h3>
+          <p className="text-gray-500 text-sm mb-4">{mapError}</p>
+          <button onClick={onBack} className="px-4 py-2 bg-sky-700 text-white rounded-lg text-sm font-medium hover:bg-sky-800">Return to Portal</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <header className="bg-white border-b shadow-sm sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button onClick={onBack} className="flex items-center gap-1.5 text-sky-700 hover:text-sky-800 text-sm font-medium"><Icon name="arrow-left" size={16} /> Back</button>
+            <div className="h-5 w-px bg-gray-200" />
+            <h1 className="text-lg font-bold text-gray-900">Construction Activity Map</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            {[{v:'all',l:'All Projects',ct:activeCount+completedCount},{v:'approved',l:'Active',ct:activeCount,c:'bg-amber-100 text-amber-800'},{v:'completed',l:'Completed',ct:completedCount,c:'bg-emerald-100 text-emerald-800'}].map(f => (
+              <button key={f.v} onClick={() => setFilter(f.v)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${filter===f.v ? (f.c||'bg-sky-100 text-sky-800') : 'text-gray-500 hover:bg-gray-100'}`}>
+                {f.l} ({f.ct})
+              </button>
+            ))}
+          </div>
+        </div>
+      </header>
+      <div className="flex-1 relative" style={{ minHeight: 'calc(100vh - 56px)' }}>
+        <div ref={mapContainer} className="absolute inset-0" />
+        <div className="absolute bottom-6 left-4 bg-white/95 backdrop-blur rounded-xl shadow-lg p-3 text-xs border z-10">
+          <p className="font-bold text-gray-800 mb-2 text-[11px] uppercase tracking-wider">Construction Status</p>
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full border-2 border-white shadow" style={{backgroundColor:CONSTRUCTION_COLORS.approved}} /><span className="text-gray-700 font-medium">Active Construction</span></div>
+            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full border-2 border-white shadow" style={{backgroundColor:CONSTRUCTION_COLORS.completed}} /><span className="text-gray-700 font-medium">Completed</span></div>
+          </div>
+        </div>
+        {selectedProject && (
+          <div className="absolute top-4 right-4 bg-white rounded-xl shadow-xl border w-80 z-20 overflow-hidden">
+            <div className={`px-4 py-3 ${selectedProject.status === 'approved' ? 'bg-amber-50 border-b border-amber-100' : 'bg-emerald-50 border-b border-emerald-100'}`}>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-gray-900">{selectedProject.id}</span>
+                <button onClick={() => setSelectedProject(null)} className="text-gray-400 hover:text-gray-600"><Icon name="x" size={16} /></button>
+              </div>
+              <StatusBadge status={selectedProject.status} />
+            </div>
+            <div className="p-4 space-y-3 text-sm">
+              <div><div className="text-[10px] text-gray-400 uppercase font-semibold">Address</div><div className="font-medium">{selectedProject.address}</div></div>
+              <div><div className="text-[10px] text-gray-400 uppercase font-semibold">Project Type</div><div className="font-medium">{selectedProject.type}</div></div>
+              <div><div className="text-[10px] text-gray-400 uppercase font-semibold">Applicant</div><div className="text-gray-600">{selectedProject.applicant}</div></div>
+              {selectedProject.valuation > 0 && <div><div className="text-[10px] text-gray-400 uppercase font-semibold">Project Value</div><div className="font-medium">${Number(selectedProject.valuation).toLocaleString()}</div></div>}
+              {selectedProject.description && <div><div className="text-[10px] text-gray-400 uppercase font-semibold">Description</div><div className="text-gray-600 text-xs leading-relaxed">{selectedProject.description}</div></div>}
+              {selectedProject.submitted && <div><div className="text-[10px] text-gray-400 uppercase font-semibold">Submitted</div><div className="text-gray-500 text-xs">{selectedProject.submitted}</div></div>}
+            </div>
+          </div>
+        )}
+        <div className="absolute top-4 left-4 flex gap-2 z-10">
+          <div className="bg-white/95 backdrop-blur rounded-lg shadow px-3 py-2 text-center border">
+            <div className="text-lg font-bold text-amber-600">{activeCount}</div>
+            <div className="text-[10px] text-gray-500 font-medium">Active</div>
+          </div>
+          <div className="bg-white/95 backdrop-blur rounded-lg shadow px-3 py-2 text-center border">
+            <div className="text-lg font-bold text-emerald-600">{completedCount}</div>
+            <div className="text-[10px] text-gray-500 font-medium">Completed</div>
+          </div>
+          <div className="bg-white/95 backdrop-blur rounded-lg shadow px-3 py-2 text-center border">
+            <div className="text-lg font-bold text-sky-600">${permits.filter(p => p.status === 'approved' && p.coords).reduce((s, p) => s + (p.valuation || 0), 0).toLocaleString()}</div>
+            <div className="text-[10px] text-gray-500 font-medium">Active Value</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

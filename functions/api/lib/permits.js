@@ -72,9 +72,14 @@ export async function handlePermits(method, path, url, request, db) {
         floodplain_permit_num, elevation_cert, foundation_type,
         building_height_residential, building_height_commercial, building_height_accessory,
         connection_type, structure_type, connect_date, line_size, line_length, sewer_grade, contractor_insurance,
+        proposed_zoning, zone_change_reason, proposed_use, base_flood_elevation, proposed_development, variance_reason,
+        num_lots, min_lot_size, water_supply_type, wastewater_type, current_land_use, groundwater_depth, bedrock_depth,
+        preliminary_plat_date, improvements_installed, materials_submitted, occupation, parcel_history,
+        exemption_type, exemption_reason, intended_use, contiguous, include_rows, existing_structures,
+        abutting_owners, all_consent, abandonment_reason, public_access, utilities_present,
         status, submitted_at, zoning_district, flood_zone,
         latitude, longitude, fees_calculated, assigned_to, priority)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      VALUES (${'?,'.repeat(81)}?,
         'pending', datetime('now'), ?, ?, ?, ?, ?, ?, 'normal')
     `).bind(
       permitNumber, permitType.id, s(data.parcel_id), s(data.address),
@@ -90,6 +95,11 @@ export async function handlePermits(method, path, url, request, db) {
       s(data.floodplain_permit_num), s(data.elevation_cert), s(data.foundation_type),
       s(data.building_height_residential), s(data.building_height_commercial), s(data.building_height_accessory),
       s(data.connection_type), s(data.structure_type), s(data.connect_date), s(data.line_size), s(data.line_length), s(data.sewer_grade), s(data.contractor_insurance),
+      s(data.proposed_zoning), s(data.zone_change_reason), s(data.proposed_use), s(data.base_flood_elevation), s(data.proposed_development), s(data.variance_reason),
+      s(data.num_lots), s(data.min_lot_size), s(data.water_supply_type), s(data.wastewater_type), s(data.current_land_use), s(data.groundwater_depth), s(data.bedrock_depth),
+      s(data.preliminary_plat_date), s(data.improvements_installed), s(data.materials_submitted), s(data.occupation), s(data.parcel_history),
+      s(data.exemption_type), s(data.exemption_reason), s(data.intended_use), s(data.contiguous), s(data.include_rows), s(data.existing_structures),
+      s(data.abutting_owners), s(data.all_consent), s(data.abandonment_reason), s(data.public_access), s(data.utilities_present),
       s(data.zoning_district), s(data.flood_zone),
       lat, lng, permitType.base_fee, admin?.id || null
     ).run();
@@ -171,7 +181,12 @@ export async function handlePermits(method, path, url, request, db) {
       'variance_regulation', 'variance_hardship', 'variance_public_interest',
       'floodplain_permit_num', 'elevation_cert', 'foundation_type',
       'building_height_residential', 'building_height_commercial', 'building_height_accessory',
-      'connection_type', 'structure_type', 'connect_date', 'line_size', 'line_length', 'sewer_grade', 'contractor_insurance'];
+      'connection_type', 'structure_type', 'connect_date', 'line_size', 'line_length', 'sewer_grade', 'contractor_insurance',
+      'proposed_zoning', 'zone_change_reason', 'proposed_use', 'base_flood_elevation', 'proposed_development', 'variance_reason',
+      'num_lots', 'min_lot_size', 'water_supply_type', 'wastewater_type', 'current_land_use', 'groundwater_depth', 'bedrock_depth',
+      'preliminary_plat_date', 'improvements_installed', 'materials_submitted', 'occupation', 'parcel_history',
+      'exemption_type', 'exemption_reason', 'intended_use', 'contiguous', 'include_rows', 'existing_structures',
+      'abutting_owners', 'all_consent', 'abandonment_reason', 'public_access', 'utilities_present'];
     for (const f of allowed) {
       if (f in data) { updates.push(`${f} = ?`); bindings.push(data[f]); }
     }

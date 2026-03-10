@@ -213,7 +213,22 @@ CREATE TABLE IF NOT EXISTS email_queue (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS form_submissions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  submission_number TEXT UNIQUE NOT NULL,
+  form_type TEXT NOT NULL,
+  form_name TEXT,
+  data TEXT,
+  status TEXT DEFAULT 'received',
+  staff_notes TEXT,
+  submitted_at TEXT DEFAULT (datetime('now')),
+  reviewed_at TEXT,
+  reviewed_by INTEGER REFERENCES users(id)
+);
+
 -- ===================== INDEXES =====================
+CREATE INDEX IF NOT EXISTS idx_form_submissions_type ON form_submissions(form_type);
+CREATE INDEX IF NOT EXISTS idx_form_submissions_number ON form_submissions(submission_number);
 CREATE INDEX IF NOT EXISTS idx_permits_status ON permits(status);
 CREATE INDEX IF NOT EXISTS idx_permits_number ON permits(permit_number);
 CREATE INDEX IF NOT EXISTS idx_permits_submitted ON permits(submitted_at);
@@ -309,5 +324,13 @@ CREATE TABLE IF NOT EXISTS email_queue (
   status TEXT DEFAULT 'pending', attempts INTEGER DEFAULT 0,
   sent_at TEXT, error TEXT,
   created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS form_submissions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  submission_number TEXT UNIQUE NOT NULL,
+  form_type TEXT NOT NULL, form_name TEXT, data TEXT,
+  status TEXT DEFAULT 'received', staff_notes TEXT,
+  submitted_at TEXT DEFAULT (datetime('now')),
+  reviewed_at TEXT, reviewed_by INTEGER REFERENCES users(id)
 );
 `;
