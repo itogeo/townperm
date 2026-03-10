@@ -57,21 +57,40 @@ export async function handlePermits(method, path, url, request, db) {
 
     const admin = await db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").first();
 
+    const s = (v) => v || null; // shorthand for nullable string
     const result = await db.prepare(`
       INSERT INTO permits (permit_number, permit_type_id, parcel_id, address,
-        applicant_name, applicant_email, applicant_phone, owner_name, owner_phone, owner_address,
+        applicant_name, applicant_email, applicant_phone, applicant_address,
+        owner_name, owner_phone, owner_email, owner_address, owner_city, owner_state, owner_zip,
+        lot, block, subdivision, land_area,
+        builder_name, builder_phone, builder_email, builder_license,
+        builder_address, builder_city, builder_state, builder_zip,
         description, work_type, valuation, square_footage,
+        construction_start, corner_pins, after_the_fact,
+        project_name, developer_name, developer_phone,
+        variance_regulation, variance_hardship, variance_public_interest,
+        floodplain_permit_num, elevation_cert, foundation_type,
+        building_height_residential, building_height_commercial, building_height_accessory,
+        connection_type, structure_type, connect_date, line_size, line_length, sewer_grade, contractor_insurance,
         status, submitted_at, zoning_district, flood_zone,
         latitude, longitude, fees_calculated, assigned_to, priority)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), ?, ?, ?, ?, ?, ?, 'normal')
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        'pending', datetime('now'), ?, ?, ?, ?, ?, ?, 'normal')
     `).bind(
-      permitNumber, permitType.id, data.parcel_id || null, data.address || null,
-      data.applicant_name || null, data.applicant_email || null,
-      data.applicant_phone || null, data.owner_name || null,
-      data.owner_phone || null, data.owner_address || null,
-      data.description || null, data.work_type || null,
-      data.valuation || 0, data.square_footage || null,
-      data.zoning_district || null, data.flood_zone || null,
+      permitNumber, permitType.id, s(data.parcel_id), s(data.address),
+      s(data.applicant_name), s(data.applicant_email), s(data.applicant_phone), s(data.applicant_address),
+      s(data.owner_name), s(data.owner_phone), s(data.owner_email), s(data.owner_address), s(data.owner_city), s(data.owner_state), s(data.owner_zip),
+      s(data.lot), s(data.block), s(data.subdivision), s(data.land_area),
+      s(data.builder_name), s(data.builder_phone), s(data.builder_email), s(data.builder_license),
+      s(data.builder_address), s(data.builder_city), s(data.builder_state), s(data.builder_zip),
+      s(data.description), s(data.work_type), data.valuation || 0, data.square_footage || null,
+      s(data.construction_start), s(data.corner_pins), data.after_the_fact ? 1 : 0,
+      s(data.project_name), s(data.developer_name), s(data.developer_phone),
+      s(data.variance_regulation), s(data.variance_hardship), s(data.variance_public_interest),
+      s(data.floodplain_permit_num), s(data.elevation_cert), s(data.foundation_type),
+      s(data.building_height_residential), s(data.building_height_commercial), s(data.building_height_accessory),
+      s(data.connection_type), s(data.structure_type), s(data.connect_date), s(data.line_size), s(data.line_length), s(data.sewer_grade), s(data.contractor_insurance),
+      s(data.zoning_district), s(data.flood_zone),
       lat, lng, permitType.base_fee, admin?.id || null
     ).run();
 
@@ -143,7 +162,16 @@ export async function handlePermits(method, path, url, request, db) {
     if (!permit) return json({ error: 'Permit not found' }, 404);
 
     const updates = [], bindings = [];
-    const allowed = ['status', 'review_notes', 'conditions', 'denial_reason', 'fees_paid', 'priority', 'assigned_to', 'address', 'description', 'applicant_name', 'applicant_email', 'applicant_phone', 'owner_name', 'valuation', 'square_footage', 'zoning_district'];
+    const allowed = ['status', 'review_notes', 'conditions', 'denial_reason', 'fees_paid', 'priority', 'assigned_to',
+      'address', 'description', 'applicant_name', 'applicant_email', 'applicant_phone', 'applicant_address',
+      'owner_name', 'owner_phone', 'owner_email', 'owner_address', 'owner_city', 'owner_state', 'owner_zip',
+      'lot', 'block', 'subdivision', 'land_area', 'valuation', 'square_footage', 'zoning_district',
+      'builder_name', 'builder_phone', 'builder_email', 'builder_license', 'builder_address', 'builder_city', 'builder_state', 'builder_zip',
+      'construction_start', 'corner_pins', 'after_the_fact', 'project_name', 'developer_name', 'developer_phone',
+      'variance_regulation', 'variance_hardship', 'variance_public_interest',
+      'floodplain_permit_num', 'elevation_cert', 'foundation_type',
+      'building_height_residential', 'building_height_commercial', 'building_height_accessory',
+      'connection_type', 'structure_type', 'connect_date', 'line_size', 'line_length', 'sewer_grade', 'contractor_insurance'];
     for (const f of allowed) {
       if (f in data) { updates.push(`${f} = ?`); bindings.push(data[f]); }
     }

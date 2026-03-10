@@ -214,13 +214,16 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
     permit_type_code: initialType || 'ZP-R',
     address: '', parcel_id: '', lot: '', block: '', subdivision: '',
     zoning_district: '', flood_zone: '', land_area: '',
-    applicant_name: '', applicant_phone: '', applicant_email: '',
-    owner_name: '', owner_phone: '', owner_address: '', owner_city: '', owner_state: 'MT', owner_zip: '',
+    applicant_name: '', applicant_phone: '', applicant_email: '', applicant_address: '',
+    owner_name: '', owner_phone: '', owner_email: '', owner_address: '', owner_city: '', owner_state: 'MT', owner_zip: '',
     builder_name: '', builder_phone: '', builder_email: '', builder_license: '',
+    builder_address: '', builder_city: '', builder_state: 'MT', builder_zip: '',
     description: '', valuation: '', square_footage: '', construction_start: '', work_type: '',
     project_name: '', developer_name: '', developer_phone: '',
     variance_regulation: '', variance_hardship: '', variance_public_interest: '',
     floodplain_permit_num: '', elevation_cert: '', foundation_type: '',
+    building_height_residential: '', building_height_commercial: '', building_height_accessory: '',
+    connection_type: '', structure_type: '', connect_date: '', line_size: '', line_length: '', sewer_grade: '', contractor_insurance: '',
     after_the_fact: false, corner_pins: '',
   };
   const draft = loadDraft();
@@ -243,14 +246,14 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
   const isCUP = form.permit_type_code === 'CUP';
   const isVariance = form.permit_type_code === 'VAR';
   const isFloodplain = form.permit_type_code === 'FP';
+  const isWSC = form.permit_type_code === 'WSC';
   const inp = "w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 outline-none";
   const section = "border-t pt-5 mt-6";
-  const sectionHead = (icon, title, desc) => (
-    <div className="flex items-center gap-3 mb-4">
-      <div className="w-9 h-9 bg-sky-100 rounded-lg flex items-center justify-center flex-shrink-0"><Icon name={icon} size={18} className="text-sky-700" /></div>
-      <div><h4 className="font-semibold text-gray-900">{title}</h4>{desc && <p className="text-xs text-gray-500">{desc}</p>}</div>
-    </div>
-  );
+  const F = (label, field, props = {}) => (<div className={props.cls}><label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+    {props.type === 'select' ? <select value={form[field]} onChange={e => update(field, e.target.value)} className={inp} style={props.big ? {fontSize:'16px'} : {}}>{props.opts}</select>
+    : props.type === 'textarea' ? <textarea value={form[field]} onChange={e => update(field, e.target.value)} placeholder={props.ph} rows={props.rows||3} className={inp} style={props.big ? {fontSize:'16px'} : {}} />
+    : <input type={props.t||'text'} value={form[field]} onChange={e => update(field, e.target.value)} placeholder={props.ph} className={`${inp} ${props.mono?'font-mono':''}`} style={props.big ? {fontSize:'16px'} : {}} />}</div>);
+  const sectionHead = (icon, title, desc) => (<div className="flex items-center gap-3 mb-4"><div className="w-9 h-9 bg-sky-100 rounded-lg flex items-center justify-center flex-shrink-0"><Icon name={icon} size={18} className="text-sky-700" /></div><div><h4 className="font-semibold text-gray-900">{title}</h4>{desc && <p className="text-xs text-gray-500">{desc}</p>}</div></div>);
 
   const canSubmit = !!form.address && !!form.applicant_name && !!form.description && agreed;
 
@@ -318,6 +321,10 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
                     <div><label className="block text-xs font-medium text-blue-700 mb-1">FEMA Flood Zone</label><select value={form.flood_zone} onChange={e => update('flood_zone', e.target.value)} className={inp}><option value="">Select...</option><option value="AE">AE - Detailed Study</option><option value="A">A - Approximate Study</option><option value="X">X - Outside Floodplain</option></select></div>
                     <div><label className="block text-xs font-medium text-blue-700 mb-1">Foundation Type</label><select value={form.foundation_type} onChange={e => update('foundation_type', e.target.value)} className={inp}><option value="">Select...</option><option value="Slab on Grade">Slab on Grade</option><option value="Crawl Space">Crawl Space</option><option value="Stem Walls">Stem Walls</option><option value="Other">Other</option></select></div>
                   </div>
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <div><label className="block text-xs font-medium text-blue-700 mb-1">Floodplain Permit #</label><input type="text" value={form.floodplain_permit_num} onChange={e => update('floodplain_permit_num', e.target.value)} className={inp} /></div>
+                    <div><label className="block text-xs font-medium text-blue-700 mb-1">Elevation Certificate</label><input type="text" value={form.elevation_cert} onChange={e => update('elevation_cert', e.target.value)} placeholder="If needed" className={inp} /></div>
+                  </div>
                 </div>
               )}
               <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.after_the_fact} onChange={e => update('after_the_fact', e.target.checked)} className="accent-sky-600" /><span className="text-gray-700">This is an after-the-fact permit application</span></label>
@@ -328,11 +335,9 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
           <div className={section}>
             {sectionHead('user', 'Applicant Information', 'The person responsible for this permit request.')}
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Applicant Name *</label><input type="text" value={form.applicant_name} onChange={e => update('applicant_name', e.target.value)} placeholder="Full name" className={inp} style={{fontSize:'16px'}} /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label><input type="tel" value={form.applicant_phone} onChange={e => update('applicant_phone', e.target.value)} placeholder="(406) 555-0123" className={inp} style={{fontSize:'16px'}} /></div>
-              </div>
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email" value={form.applicant_email} onChange={e => update('applicant_email', e.target.value)} placeholder="applicant@email.com" className={inp} style={{fontSize:'16px'}} /></div>
+              <div className="grid grid-cols-2 gap-3">{F('Applicant Name *','applicant_name',{ph:'Full name',big:1})}{F('Phone *','applicant_phone',{t:'tel',ph:'(406) 555-0123',big:1})}</div>
+              {F('Email','applicant_email',{t:'email',ph:'applicant@email.com',big:1})}
+              {isCUP && F('Mailing Address','applicant_address',{ph:'Street, City, State, Zip'})}
             </div>
           </div>
 
@@ -340,16 +345,10 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
           <div className={section}>
             {sectionHead('home', 'Property Owner', 'If different from applicant. Leave blank if you are the owner.')}
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Owner Name</label><input type="text" value={form.owner_name} onChange={e => update('owner_name', e.target.value)} className={inp} /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Owner Phone</label><input type="tel" value={form.owner_phone} onChange={e => update('owner_phone', e.target.value)} className={inp} /></div>
-              </div>
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">Owner Mailing Address</label><input type="text" value={form.owner_address} onChange={e => update('owner_address', e.target.value)} className={inp} /></div>
-              <div className="grid grid-cols-3 gap-3">
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">City</label><input type="text" value={form.owner_city} onChange={e => update('owner_city', e.target.value)} className={inp} /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">State</label><input type="text" value={form.owner_state} onChange={e => update('owner_state', e.target.value)} className={inp} /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Zip</label><input type="text" value={form.owner_zip} onChange={e => update('owner_zip', e.target.value)} className={inp} /></div>
-              </div>
+              <div className="grid grid-cols-2 gap-3">{F('Owner Name','owner_name')}{F('Owner Phone','owner_phone',{t:'tel'})}</div>
+              {F('Owner Email','owner_email',{t:'email'})}
+              {F('Owner Mailing Address','owner_address')}
+              <div className="grid grid-cols-3 gap-3">{F('City','owner_city')}{F('State','owner_state')}{F('Zip','owner_zip')}</div>
             </div>
           </div>
 
@@ -358,13 +357,33 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
             <div className={section}>
               {sectionHead('hard-hat', 'Builder / Contractor')}
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Builder Name</label><input type="text" value={form.builder_name} onChange={e => update('builder_name', e.target.value)} className={inp} /></div>
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Builder Phone</label><input type="tel" value={form.builder_phone} onChange={e => update('builder_phone', e.target.value)} className={inp} /></div>
+                <div className="grid grid-cols-2 gap-3">{F('Builder Name','builder_name')}{F('Builder Phone','builder_phone',{t:'tel'})}</div>
+                <div className="grid grid-cols-2 gap-3">{F('Builder Email','builder_email',{t:'email'})}{F('TF Business License #','builder_license')}</div>
+                {F('Builder Mailing Address','builder_address')}
+                <div className="grid grid-cols-3 gap-3">{F('City','builder_city')}{F('State','builder_state')}{F('Zip','builder_zip')}</div>
+              </div>
+            </div>
+          )}
+
+          {/* 5b. Water/Sewer Connection Details */}
+          {isWSC && (
+            <div className={section}>
+              {sectionHead('droplet', 'Water / Sewer Connection Details', 'Minimum 48 hours notice (M-F) before physical connection. $250 fee each.')}
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Connection Type *</label><select value={form.connection_type} onChange={e => update('connection_type', e.target.value)} className={inp}><option value="">Select...</option><option value="Water">Water</option><option value="Sewer">Sewer</option><option value="Both">Water & Sewer</option></select></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Type of Structure</label><select value={form.structure_type} onChange={e => update('structure_type', e.target.value)} className={inp}><option value="">Select...</option><option value="Residential">Residential</option><option value="Commercial">Commercial</option><option value="Industrial">Industrial</option></select></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Approx. Connect Date</label><input type="date" value={form.connect_date} onChange={e => update('connect_date', e.target.value)} className={inp} /></div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Builder Email</label><input type="email" value={form.builder_email} onChange={e => update('builder_email', e.target.value)} className={inp} /></div>
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Business License #</label><input type="text" value={form.builder_license} onChange={e => update('builder_license', e.target.value)} className={inp} /></div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Line Size</label><input type="text" value={form.line_size} onChange={e => update('line_size', e.target.value)} className={inp} /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Length of Line</label><input type="text" value={form.line_length} onChange={e => update('line_length', e.target.value)} className={inp} /></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Sewer Grade & Size</label><input type="text" value={form.sewer_grade} onChange={e => update('sewer_grade', e.target.value)} className={inp} /></div>
+                </div>
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.contractor_insurance === 'Y'} onChange={e => update('contractor_insurance', e.target.checked ? 'Y' : 'N')} className="accent-sky-600" /><span className="text-gray-700">Contractor has proof of insurance/bond on file</span></label>
+                <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 text-xs text-amber-800">
+                  <p className="font-semibold">Water/Sewer Requirements:</p>
+                  <ul className="mt-1 list-disc ml-4 space-y-0.5"><li>Work on City property MUST be done by a State licensed/bonded contractor</li><li>All sewer joints inspected by City prior to backfill (City Ord. 9-5-9)</li><li>All connections to mains done by City Personnel</li></ul>
                 </div>
               </div>
             </div>
@@ -378,17 +397,24 @@ const NewPermitModal = ({ permitTypes, onClose, onCreated, demoMode, initialType
               <div><label className="block text-sm font-medium text-gray-700 mb-1">{isVariance ? 'Explain Variance Request *' : isCUP ? 'Conditional Use Description *' : 'Describe Proposed Structure and Use *'}</label>
                 <textarea value={form.description} onChange={e => update('description', e.target.value)} placeholder={isVariance ? 'Which zoning regulations does the variance apply to...' : isCUP ? 'Describe the conditional use...' : 'Describe the proposed work...'} rows={4} className={inp} style={{fontSize:'16px'}} /></div>
               {isVariance && (<>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Describe the Hardship *</label><textarea value={form.variance_hardship} onChange={e => update('variance_hardship', e.target.value)} placeholder="Describe the hardship..." rows={3} className={inp} /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">How Does This Serve the Public Interest? *</label><textarea value={form.variance_public_interest} onChange={e => update('variance_public_interest', e.target.value)} placeholder="How this serves the public interest..." rows={3} className={inp} /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Zoning Regulations Variance Applies To *</label><textarea value={form.variance_regulation} onChange={e => update('variance_regulation', e.target.value)} placeholder="Which zoning regulations does this variance apply to..." rows={3} className={inp} /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Describe the Hardship *</label><textarea value={form.variance_hardship} onChange={e => update('variance_hardship', e.target.value)} placeholder="Describe the hardship imposed by the zoning regulations..." rows={3} className={inp} /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">How Does This Serve the Public Interest? *</label><textarea value={form.variance_public_interest} onChange={e => update('variance_public_interest', e.target.value)} placeholder="Describe how this variance will serve the public interest..." rows={3} className={inp} /></div>
               </>)}
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Estimated Value ($)</label><input type="number" value={form.valuation} onChange={e => update('valuation', e.target.value)} placeholder="0" className={inp} /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Square Footage</label><input type="number" value={form.square_footage} onChange={e => update('square_footage', e.target.value)} placeholder="Total sq ft" className={inp} /></div>
               </div>
-              {isZoning && (<div className="grid grid-cols-2 gap-3">
+              {isZoning && (<><div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Construction Start</label><input type="date" value={form.construction_start} onChange={e => update('construction_start', e.target.value)} className={inp} /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Corner Pins</label><input type="text" value={form.corner_pins} onChange={e => update('corner_pins', e.target.value)} placeholder="How many?" className={inp} /></div>
-              </div>)}
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Corner Pins</label><input type="text" value={form.corner_pins} onChange={e => update('corner_pins', e.target.value)} placeholder="How many marked?" className={inp} /></div>
+              </div>
+              <p className="text-xs font-medium text-gray-500 mt-2">Height of Building(s) at Tallest Point:</p>
+              <div className="grid grid-cols-3 gap-3">
+                <div><label className="block text-xs font-medium text-gray-700 mb-1">Residential</label><input type="text" value={form.building_height_residential} onChange={e => update('building_height_residential', e.target.value)} placeholder="Max 36 ft" className={inp} /></div>
+                <div><label className="block text-xs font-medium text-gray-700 mb-1">Commercial</label><input type="text" value={form.building_height_commercial} onChange={e => update('building_height_commercial', e.target.value)} className={inp} /></div>
+                <div><label className="block text-xs font-medium text-gray-700 mb-1">Accessory</label><input type="text" value={form.building_height_accessory} onChange={e => update('building_height_accessory', e.target.value)} placeholder="Max 20 ft" className={inp} /></div>
+              </div></>)}
               {isCUP && (<div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Developer/Architect</label><input type="text" value={form.developer_name} onChange={e => update('developer_name', e.target.value)} className={inp} /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Developer Phone</label><input type="tel" value={form.developer_phone} onChange={e => update('developer_phone', e.target.value)} className={inp} /></div>
