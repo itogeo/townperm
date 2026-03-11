@@ -14,7 +14,14 @@ export async function handlePermits(method, path, url, request, db) {
     const priority = url.searchParams.get('priority');
     const assigned = url.searchParams.get('assigned_to');
 
-    let query = `SELECT p.*, pt.code as type_code, pt.name as type_name,
+    let query = `SELECT p.id, p.permit_number, p.permit_type_id, p.parcel_id, p.address,
+      p.zoning_district, p.flood_zone, p.latitude, p.longitude,
+      p.applicant_name, p.applicant_email, p.applicant_phone, p.applicant_address,
+      p.owner_name, p.owner_phone, p.owner_email,
+      p.description, p.work_type, p.valuation, p.square_footage,
+      p.status, p.priority, p.assigned_to, p.submitted_at, p.reviewed_at,
+      p.expires_at, p.fees_calculated, p.fees_paid, p.decision, p.decision_date,
+      pt.code as type_code, pt.name as type_name,
       u.first_name as assigned_first, u.last_name as assigned_last
       FROM permits p JOIN permit_types pt ON p.permit_type_id = pt.id
       LEFT JOIN users u ON p.assigned_to = u.id WHERE 1=1`;
@@ -140,13 +147,13 @@ export async function handlePermits(method, path, url, request, db) {
   const numMatch = path.match(/^\/permits\/([A-Z][\w-]+)$/);
   if (method === 'GET' && (idMatch || numMatch)) {
     const ref = (idMatch || numMatch)[1];
-    const permit = await db.prepare(`
-      SELECT p.*, pt.code as type_code, pt.name as type_name, pt.base_fee, pt.requires_inspection,
-        u.first_name as assigned_first, u.last_name as assigned_last, u.title as assigned_title
-      FROM permits p JOIN permit_types pt ON p.permit_type_id = pt.id
-      LEFT JOIN users u ON p.assigned_to = u.id WHERE p.id = ? OR p.permit_number = ?
-    `).bind(ref, ref).first();
-    if (!permit) return json({ error: 'Permit not found' }, 404);
+    const permitRaw = await db.prepare('SELECT * FROM permits WHERE id = ? OR permit_number = ?').bind(ref, ref).first();
+    if (!permitRaw) return json({ error: 'Permit not found' }, 404);
+    const [ptRow, uRow] = await Promise.all([
+      db.prepare('SELECT code as type_code, name as type_name, base_fee, requires_inspection FROM permit_types WHERE id = ?').bind(permitRaw.permit_type_id).first(),
+      permitRaw.assigned_to ? db.prepare('SELECT first_name as assigned_first, last_name as assigned_last, title as assigned_title FROM users WHERE id = ?').bind(permitRaw.assigned_to).first() : null,
+    ]);
+    const permit = { ...permitRaw, ...ptRow, ...(uRow || {}) };
 
     const [parcel, activity, inspections, comments, payments, documents, deadlines] = await Promise.all([
       permit.parcel_id ? db.prepare('SELECT * FROM parcels WHERE parcel_id = ?').bind(permit.parcel_id).first() : null,
@@ -171,7 +178,7 @@ export async function handlePermits(method, path, url, request, db) {
     if (bodyErr) return bodyErr;
     if (data.status && !VALID_STATUSES.permits.includes(data.status)) return json({ error: `Invalid status. Allowed: ${VALID_STATUSES.permits.join(', ')}` }, 400);
     const user = auth.user;
-    const permit = await db.prepare('SELECT * FROM permits WHERE id = ?').bind(permitId).first();
+    const permit = await db.prepare('SELECT id, permit_number, status FROM permits WHERE id = ?').bind(permitId).first();
     if (!permit) return json({ error: 'Permit not found' }, 404);
 
     const updates = [], bindings = [];
