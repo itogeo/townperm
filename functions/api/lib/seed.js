@@ -54,8 +54,8 @@ INSERT OR IGNORE INTO request_categories (code, name, description, department, p
   ('SIDEWALK', 'Sidewalk Damage', 'Cracked or heaved sidewalk', 'Public Works', 'normal'),
   ('TREE', 'Tree/Vegetation', 'Overgrown trees blocking view or damaged trees', 'Public Works', 'low'),
   ('SIGN', 'Sign Damaged/Missing', 'Street sign or stop sign needs repair', 'Public Works', 'normal'),
-  ('ANIMAL', 'Animal Control', 'Stray or dangerous animal report', 'Police', 'normal'),
-  ('NOISE', 'Noise Complaint', 'Excessive noise or nuisance', 'Police', 'low'),
+  ('ANIMAL', 'Animal Control', 'Stray, injured, or loose livestock report — contact City Hall for after-hours', 'City Hall', 'normal'),
+  ('NOISE', 'Noise/Nuisance', 'Persistent noise, junk vehicles, or property nuisance — for emergencies call 911', 'City Hall', 'low'),
   ('ZONING', 'Zoning Violation', 'Suspected zoning or code violation', 'Zoning', 'normal'),
   ('OTHER', 'Other', 'General city service request', 'City Hall', 'normal');
 
@@ -269,4 +269,8 @@ INSERT OR IGNORE INTO park_reservations (reservation_number, facility_id, contac
   ('PR-2026-013', 5, 'Gallatin Valley Soccer Association', '406-285-6641', 'gvsa@gmail.com', 'Youth Soccer Tournament', '8U and 10U round-robin tournament — 6 teams', '2026-09-13', '08:00', '17:00', 120, 'approved', 50.00, 50.00),
   ('PR-2026-014', 2, 'Three Forks Boy Scout Troop 112', '406-285-3300', 'scoutmaster112@gmail.com', 'Eagle Scout Court of Honor', 'Court of honor for two Eagle Scout recipients', '2026-05-30', '14:00', '17:00', 50, 'approved', 50.00, 50.00),
   ('PR-2026-015', 4, 'Headwaters Swim Lessons', '406-285-3224', 'pool@threeforks.gov', 'Summer Learn-to-Swim Program', 'Week 1 of 4-week learn-to-swim series for ages 4-12', '2026-06-22', '09:00', '12:00', 30, 'approved', 50.00, 50.00);
+
+-- Fix 311 categories: Animal Control and Noise should not route to Police
+UPDATE request_categories SET department = 'City Hall', description = 'Stray, injured, or loose livestock report — contact City Hall for after-hours' WHERE code = 'ANIMAL';
+UPDATE request_categories SET department = 'City Hall', name = 'Noise/Nuisance', description = 'Persistent noise, junk vehicles, or property nuisance — for emergencies call 911' WHERE code = 'NOISE';
 `;

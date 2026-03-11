@@ -32,6 +32,8 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
   const [licenseStatusFilter, setLicenseStatusFilter] = useState('all');
   const [parkFacilityFilter, setParkFacilityFilter] = useState('all');
   const [parkStatusFilter, setParkStatusFilter] = useState('all');
+  const [parkView, setParkView] = useState('table');
+  const [parkCalMonth, setParkCalMonth] = useState(new Date());
   const [requestCategoryFilter, setRequestCategoryFilter] = useState('all');
   const [requestStatusFilter, setRequestStatusFilter] = useState('all');
   const [formTypeFilter, setFormTypeFilter] = useState('all');
@@ -196,6 +198,26 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
 
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const inp = "w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 outline-none";
+
+  // Approximate street address from lat/lng for Three Forks, MT
+  const approxAddress = (lat, lng) => {
+    if (!lat || !lng) return null;
+    const ewStreets = [
+      { lat: 45.897, name: 'Cedar St' }, { lat: 45.894, name: 'Cedar St' },
+      { lat: 45.893, name: 'Jefferson St' }, { lat: 45.892, name: 'Elm St' },
+      { lat: 45.891, name: 'Birch St' }, { lat: 45.890, name: '1st Ave' },
+      { lat: 45.888, name: '2nd Ave' }, { lat: 45.887, name: 'Ash St' },
+      { lat: 45.886, name: 'Vigilante Way' },
+    ];
+    const nsStreets = [
+      { lng: -111.551, name: 'Main St' }, { lng: -111.549, name: '1st Ave E' },
+      { lng: -111.547, name: '2nd Ave E' }, { lng: -111.545, name: '3rd Ave E' },
+      { lng: -111.553, name: '1st Ave W' }, { lng: -111.555, name: '2nd Ave W' },
+      { lng: -111.557, name: '3rd Ave W' },
+    ];
+    const near = (arr, val, key) => arr.reduce((b, s) => Math.abs(s[key] - val) < Math.abs(b[key] - val) ? s : b);
+    return `Near ${near(nsStreets, lng, 'lng').name} & ${near(ewStreets, lat, 'lat').name}`;
+  };
 
   // Reusable field renderer
   const Field = ({ label, children }) => (
@@ -820,7 +842,91 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
           )}
 
           {/* ===== PARK RESERVATIONS ===== */}
-          {activeTab === 'parks' && (
+          {activeTab === 'parks' && parkView === 'calendar' && (() => {
+            const facilityColors = {};
+            [...new Set(reservations.map(r => r.facility_name))].filter(Boolean).forEach((f, i) => {
+              facilityColors[f] = ['bg-sky-500','bg-violet-500','bg-emerald-500','bg-amber-500','bg-rose-500'][i % 5];
+            });
+            const y = parkCalMonth.getFullYear(), m = parkCalMonth.getMonth();
+            const first = new Date(y, m, 1).getDay(), total = new Date(y, m+1, 0).getDate();
+            const days = []; for (let i = 0; i < first; i++) days.push(null); for (let d = 1; d <= total; d++) days.push(d);
+            const filtered = reservations.filter(r => (parkFacilityFilter === 'all' || r.facility_name === parkFacilityFilter) && (parkStatusFilter === 'all' || r.status === parkStatusFilter));
+            const getResForDay = (d) => { if (!d) return []; const ds = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; return filtered.filter(r => r.event_date === ds); };
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <select value={parkFacilityFilter} onChange={e => setParkFacilityFilter(e.target.value)} className="border px-2 py-2 rounded-lg text-sm">
+                    <option value="all">All Facilities</option>
+                    {[...new Set(reservations.map(r=>r.facility_name))].filter(Boolean).sort().map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                  <select value={parkStatusFilter} onChange={e => setParkStatusFilter(e.target.value)} className="border px-2 py-2 rounded-lg text-sm">
+                    <option value="all">All Statuses</option>
+                    {[{v:'pending',l:'Pending'},{v:'approved',l:'Approved'},{v:'denied',l:'Denied'},{v:'cancelled',l:'Cancelled'}].map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
+                  </select>
+                  <div className="ml-auto flex border rounded-lg overflow-hidden bg-white shadow-sm">
+                    <button onClick={() => setParkView('table')} className="px-3 py-1.5 text-xs font-medium flex items-center gap-1 text-gray-600 hover:bg-gray-50"><Icon name="list" size={13} /> Table</button>
+                    <button onClick={() => setParkView('calendar')} className="px-3 py-1.5 text-xs font-medium flex items-center gap-1 bg-sky-600 text-white"><Icon name="calendar" size={13} /> Calendar</button>
+                  </div>
+                </div>
+                <div className="bg-white rounded-xl shadow-sm border">
+                  <div className="p-4 border-b flex items-center justify-between">
+                    <button onClick={() => setParkCalMonth(new Date(y, m-1))} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center"><Icon name="chevron-left" size={18} /></button>
+                    <span className="font-bold text-sm">{parkCalMonth.toLocaleString('default',{month:'long',year:'numeric'})}</span>
+                    <button onClick={() => setParkCalMonth(new Date(y, m+1))} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center"><Icon name="chevron-right" size={18} /></button>
+                  </div>
+                  <div className="grid grid-cols-7 text-center text-[10px] font-bold text-gray-400 uppercase border-b">
+                    {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => <div key={d} className="py-2">{d}</div>)}
+                  </div>
+                  <div className="grid grid-cols-7">
+                    {days.map((d, i) => {
+                      const res = getResForDay(d);
+                      return (
+                        <div key={i} className={`min-h-[80px] border-b border-r p-1.5 ${!d?'bg-gray-50/50':''}`}>
+                          {d && <div className={`text-xs font-semibold mb-1 ${res.length?'text-sky-700':'text-gray-400'}`}>{d}</div>}
+                          {res.map(r => (
+                            <button key={r.id} onClick={() => { loadModuleDetail('reservation', r); }} className={`w-full text-left text-[10px] font-medium px-1.5 py-0.5 rounded mb-0.5 text-white truncate ${facilityColors[r.facility_name]||'bg-gray-400'} ${r.status==='pending'?'opacity-60':''}`} title={`${r.event_name} — ${r.facility_name}`}>
+                              {r.event_name}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {parkFacilityFilter === 'all' && (
+                    <div className="p-3 border-t flex items-center gap-3 flex-wrap">
+                      {Object.entries(facilityColors).map(([f, c]) => (
+                        <div key={f} className="flex items-center gap-1.5 text-[11px] text-gray-600"><span className={`w-3 h-3 rounded-sm ${c}`} />{f}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {selectedReservation && (
+                  <div className="bg-white rounded-xl shadow-sm border p-4">
+                    <div className="flex items-center justify-between mb-3"><span className="font-bold text-sm">{selectedReservation.reservation_number}</span><button onClick={() => { setSelectedReservation(null); setReservationDetail(null); }} className="text-gray-400 hover:text-gray-600"><Icon name="x" size={16} /></button></div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <Field label="Event">{selectedReservation.event_name}</Field>
+                      <Field label="Facility">{selectedReservation.facility_name}</Field>
+                      <Field label="Date">{selectedReservation.event_date}</Field>
+                      <Field label="Time">{selectedReservation.start_time} – {selectedReservation.end_time}</Field>
+                      <Field label="Contact">{selectedReservation.contact_name}</Field>
+                      <Field label="Guests">{selectedReservation.attendee_count || '--'}</Field>
+                    </div>
+                    <div className="flex gap-2 mt-3 pt-3 border-t">
+                      {selectedReservation.status === 'pending' && <><ActBtn onClick={() => handleModuleAction('reservation', selectedReservation.id, { status: 'approved' })} color="emerald" icon="check" label="Approve" /><ActBtn onClick={() => handleModuleAction('reservation', selectedReservation.id, { status: 'denied' })} color="red" icon="x" label="Deny" /></>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          {activeTab === 'parks' && parkView === 'table' && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 justify-end">
+                <div className="flex border rounded-lg overflow-hidden bg-white shadow-sm">
+                  <button onClick={() => setParkView('table')} className="px-3 py-1.5 text-xs font-medium flex items-center gap-1 bg-sky-600 text-white"><Icon name="list" size={13} /> Table</button>
+                  <button onClick={() => setParkView('calendar')} className="px-3 py-1.5 text-xs font-medium flex items-center gap-1 text-gray-600 hover:bg-gray-50"><Icon name="calendar" size={13} /> Calendar</button>
+                </div>
+              </div>
             <ModulePanel
               items={reservations.filter(r => (parkFacilityFilter === 'all' || r.facility_name === parkFacilityFilter) && (parkStatusFilter === 'all' || r.status === parkStatusFilter))}
               selected={selectedReservation} onSelect={r => loadModuleDetail('reservation',r)} onClose={() => { setSelectedReservation(null); setReservationDetail(null); }} loading={moduleLoading && activeTab === 'parks'} onExport={exportParksCSV}
@@ -862,6 +968,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
                 </div>
               )}
             />
+            </div>
           )}
 
           {/* ===== CITIZEN REQUESTS ===== */}
@@ -878,7 +985,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
                 { key:'request_number', label:'Request #', sortable:true, render: r => <div className="font-semibold text-sky-700">{r.request_number||`#${r.id}`}</div> },
                 { key:'category_name', label:'Category', sortable:true, render: r => r.category_name||r.category||'--' },
                 { key:'department', label:'Dept', hideMobile:true, sortable:true, render: r => <span className="text-gray-500 text-[11px]">{r.department||'--'}</span> },
-                { key:'address', label:'Address', hideMobile:true, sortable:true, render: r => <span className="text-gray-600 truncate max-w-[180px] block">{r.address||r.location||'--'}</span> },
+                { key:'address', label:'Address', hideMobile:true, sortable:true, render: r => { const addr = r.address||r.location||(r.latitude&&approxAddress(r.latitude,r.longitude)); return <span className="text-gray-600 truncate max-w-[180px] block" title={addr||''}>{addr||'--'}{!r.address&&r.latitude?<span className="text-[9px] text-gray-400 ml-1">~</span>:null}</span>; } },
                 { key:'reporter_name', label:'Reporter', hideMobile:true, sortable:true, render: r => r.reporter_name||'Anonymous' },
                 { key:'created_at', label:'Submitted', sortable:true, render: r => <span className="text-gray-500">{r.created_at?.split('T')[0]||'--'}</span> },
                 { key:'priority', label:'Priority', sortable:true, render: r => <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${r.priority==='high'?'bg-red-100 text-red-700':r.priority==='normal'?'bg-amber-100 text-amber-700':'bg-gray-100 text-gray-600'}`}>{r.priority||'normal'}</span> },
@@ -888,9 +995,9 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
               renderDetail={(req) => (
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
-                    <Field label="Category">{req.category}</Field>
-                    <Field label="Priority"><span className={req.priority==='high'||req.priority==='urgent'?'text-red-600 font-bold':''}>{req.priority||'normal'}</span></Field>
-                    <Field label="Location">{req.location||'--'}</Field>
+                    <Field label="Category">{req.category_name||req.category||'--'}</Field>
+                    <Field label="Priority"><span className={req.priority==='high'?'text-red-600 font-bold':''}>{req.priority||'normal'}</span></Field>
+                    <Field label="Address">{req.address||(req.latitude&&approxAddress(req.latitude,req.longitude))||'--'}{!req.address&&req.latitude?<span className="text-[10px] text-gray-400 ml-1">(approx)</span>:null}</Field>
                     <Field label="Submitted">{req.created_at?.split('T')[0]||'--'}</Field>
                     <Field label="Reporter">{req.reporter_name||requestDetail?.reporter_name||'Anonymous'}</Field>
                     <Field label="Phone">{req.reporter_phone||requestDetail?.reporter_phone||'--'}</Field>
