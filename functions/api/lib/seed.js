@@ -137,6 +137,15 @@ INSERT OR IGNORE INTO deadlines (module, ref_id, title, due_date, deadline_type,
   ('licenses', 1, 'Sacajawea License Renewal', '2026-12-31', 'renewal', 'Annual business license renewal'),
   ('licenses', 2, 'Liquor License Renewal', '2026-06-30', 'renewal', 'Annual liquor license renewal');
 
+-- Extended deadlines for new permits and license renewals
+INSERT OR IGNORE INTO deadlines (module, ref_id, title, due_date, deadline_type, description) VALUES
+  ('licenses', 3, 'Wheat Montana License Renewal', '2026-12-31', 'renewal', 'Annual food service license renewal'),
+  ('licenses', 4, 'Bridger Brewing License Approval', '2026-04-15', 'other', 'Pending business license decision'),
+  ('licenses', 5, 'Headwaters Vet License Decision', '2026-04-01', 'other', 'Pending business license decision'),
+  ('licenses', 8, 'Pioneer Mountain Builders Renewal', '2026-12-31', 'renewal', 'Annual contractor license renewal'),
+  ('licenses', 9, 'Valley Feed & Supply Renewal', '2026-12-31', 'renewal', 'Annual general business license renewal'),
+  ('licenses', 14, 'Headwaters Grill Renewal', '2026-12-31', 'renewal', 'Annual food service license renewal');
+
 -- Additional permits — spread across Three Forks
 INSERT OR IGNORE INTO permits (permit_number, permit_type_id, parcel_id, address, applicant_name, applicant_phone, applicant_email, status, description, valuation, latitude, longitude, submitted_at, zoning_district, flood_zone, fees_calculated, fees_paid, square_footage, assigned_to, priority, expires_at, reviewed_at, decision_date, conditions) VALUES
   ('ZP-R-2026-002', 1, NULL, '318 E Cedar St', 'Angela Patterson', '406-285-4490', 'apatterson@gmail.com', 'approved', 'New single-family residence — 1,820 sq ft ranch style', 295000, 45.8945, -111.5483, '2026-01-10', 'R', NULL, 200.00, 200.00, 1820, 1, 'normal', '2027-01-25', '2026-01-17', '2026-01-25', 'Corner pins required. Setback from alley confirmed.'),

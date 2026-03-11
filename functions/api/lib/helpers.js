@@ -259,6 +259,14 @@ export async function ensureDB(db) {
     "ALTER TABLE permits ADD COLUMN utilities_present TEXT",
   ];
   for (const sql of extraCols) { try { await db.exec(sql); } catch {} }
+  // Ensure rate_limits table exists
+  try { await db.exec("CREATE TABLE IF NOT EXISTS rate_limits (ip TEXT NOT NULL, endpoint TEXT NOT NULL, window_start TEXT NOT NULL, request_count INTEGER DEFAULT 1, PRIMARY KEY (ip, endpoint, window_start))"); } catch {}
+  // Re-apply seed data if new records are missing (INSERT OR IGNORE is idempotent)
+  const hasNewData = await db.prepare("SELECT 1 FROM permits WHERE permit_number = 'ZP-R-2026-002'").first();
+  if (!hasNewData) {
+    const seedFlat = SEED_SQL.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+    try { await db.exec(seedFlat); } catch {}
+  }
   // Seed new permit types
   const newTypes = [
     "INSERT OR IGNORE INTO permit_types (code, name, description, base_fee, requires_inspection, review_days) VALUES ('ZCA', 'Zone Change / Amend Zoning Code', 'Application to amend zoning code or change zone', 350.00, 0, 30)",
