@@ -28,6 +28,14 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
   const [sortField, setSortField] = useState('submitted');
   const [sortDir, setSortDir] = useState('desc');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [licenseTypeFilter, setLicenseTypeFilter] = useState('all');
+  const [licenseStatusFilter, setLicenseStatusFilter] = useState('all');
+  const [parkFacilityFilter, setParkFacilityFilter] = useState('all');
+  const [parkStatusFilter, setParkStatusFilter] = useState('all');
+  const [requestCategoryFilter, setRequestCategoryFilter] = useState('all');
+  const [requestStatusFilter, setRequestStatusFilter] = useState('all');
+  const [formTypeFilter, setFormTypeFilter] = useState('all');
+  const [formStatusFilter, setFormStatusFilter] = useState('all');
   // New module state
   const [licenses, setLicenses] = useState([]);
   const [selectedLicense, setSelectedLicense] = useState(null);
@@ -195,36 +203,63 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
   );
 
   // Generic module table + detail panel
-  const ModulePanel = ({ items, selected, onSelect, onClose, columns, renderDetail, filterFn, loading, onExport }) => {
+  // Generic module table + detail panel — with sorting and category filters
+  const ModulePanel = ({ items, selected, onSelect, onClose, columns, renderDetail, filterFn, loading, onExport, extraFilters = [] }) => {
+    const [mSortField, setMSortField] = useState(null);
+    const [mSortDir, setMSortDir] = useState('asc');
     if (loading) return <div className="flex items-center justify-center h-64"><div className="text-center"><div className="animate-spin w-8 h-8 border-2 border-sky-500 border-t-transparent rounded-full mx-auto mb-3"></div><p className="text-sm text-gray-500">Loading...</p></div></div>;
     const q = moduleSearch.toLowerCase();
-    const filtered = items.filter(item => {
-      const ms = !q || (filterFn ? filterFn(item, q) : JSON.stringify(item).toLowerCase().includes(q));
-      return ms;
-    });
+    let filtered = items.filter(item => !q || (filterFn ? filterFn(item, q) : JSON.stringify(item).toLowerCase().includes(q)));
+    if (mSortField) {
+      const col = columns.find(c => c.key === mSortField);
+      filtered = [...filtered].sort((a, b) => {
+        const va = col?.sortVal ? col.sortVal(a) : (a[mSortField] ?? '');
+        const vb = col?.sortVal ? col.sortVal(b) : (b[mSortField] ?? '');
+        if (typeof va === 'number' && typeof vb === 'number') return mSortDir === 'asc' ? va - vb : vb - va;
+        const sa = String(va||'').toLowerCase(), sb = String(vb||'').toLowerCase();
+        return sa < sb ? (mSortDir === 'asc' ? -1 : 1) : sa > sb ? (mSortDir === 'asc' ? 1 : -1) : 0;
+      });
+    }
+    const toggleMSort = (key) => {
+      if (!columns.find(c => c.key === key)?.sortable) return;
+      if (mSortField === key) setMSortDir(d => d === 'asc' ? 'desc' : 'asc');
+      else { setMSortField(key); setMSortDir('asc'); }
+    };
     return (
       <div className="flex gap-5 h-full">
         <div className={`${selected ? 'w-full lg:w-1/2 xl:w-3/5' : 'w-full'} flex-shrink-0`}>
           <div className="bg-white rounded-xl shadow-sm border">
-            <div className="p-3 border-b flex items-center gap-3">
-              <div className="relative flex-1 max-w-xs">
+            <div className="p-3 border-b flex items-center gap-2 flex-wrap">
+              <div className="relative min-w-[160px] flex-1 max-w-xs">
                 <Icon name="search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input type="text" placeholder="Search..." value={moduleSearch} onChange={e => setModuleSearch(e.target.value)} className="pl-9 pr-3 py-2 border rounded-lg text-sm w-full focus:ring-2 focus:ring-sky-500 outline-none" />
               </div>
-              <span className="text-xs text-gray-400">{filtered.length} items</span>
+              {extraFilters.map((f, i) => (
+                <select key={i} value={f.value} onChange={e => f.onChange(e.target.value)} className="border px-2 py-2 rounded-lg text-sm">
+                  <option value="all">{f.label}</option>
+                  {f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              ))}
+              <span className="text-xs text-gray-400 ml-auto">{filtered.length}</span>
               {onExport && <button onClick={onExport} className="text-gray-400 hover:text-gray-600 p-1.5 hover:bg-gray-100 rounded-lg" title="Export CSV"><Icon name="download" size={15} /></button>}
             </div>
-            <div className="max-h-[calc(100vh-240px)] overflow-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 text-left text-xs text-gray-500 uppercase tracking-wider sticky top-0">
-                  <tr>{columns.map(c => <th key={c.key} className={`${c.hideMobile ? 'hidden sm:table-cell' : ''} px-3 py-2.5 font-semibold`}>{c.label}</th>)}</tr>
+            <div className="max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
+              <table className="w-full min-w-max text-xs">
+                <thead className="bg-gray-50 text-left text-[10px] text-gray-500 uppercase tracking-wider sticky top-0 z-10">
+                  <tr>{columns.map(c => (
+                    <th key={c.key} onClick={() => c.sortable && toggleMSort(c.key)}
+                      className={`${c.hideMobile ? 'hidden sm:table-cell' : ''} px-3 py-2.5 font-semibold whitespace-nowrap border-b border-gray-200 ${c.sortable ? 'cursor-pointer hover:text-gray-700 select-none' : ''}`}>
+                      <span className="flex items-center gap-0.5">{c.label}{c.sortable && <Icon name={mSortField===c.key?(mSortDir==='asc'?'chevron-up':'chevron-down'):'chevrons-up-down'} size={10} className={mSortField===c.key?'':'opacity-30'} />}</span>
+                    </th>
+                  ))}</tr>
                 </thead>
                 <tbody className="divide-y">
                   {filtered.map(item => (
                     <tr key={item.id} className={`hover:bg-sky-50/50 cursor-pointer transition ${selected?.id === item.id ? 'bg-sky-50 border-l-2 border-sky-500' : ''}`} onClick={() => onSelect(item)}>
-                      {columns.map(c => <td key={c.key} className={`${c.hideMobile ? 'hidden sm:table-cell' : ''} px-3 py-2.5 text-sm`}>{c.render ? c.render(item) : item[c.key]}</td>)}
+                      {columns.map(c => <td key={c.key} className={`${c.hideMobile ? 'hidden sm:table-cell' : ''} px-3 py-2.5`}>{c.render ? c.render(item) : (item[c.key] ?? '--')}</td>)}
                     </tr>
                   ))}
+                  {filtered.length === 0 && <tr><td colSpan={columns.length} className="px-3 py-8 text-center text-sm text-gray-400">No results</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -236,7 +271,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
               <div className="p-3 border-b flex items-center justify-between bg-gray-50 rounded-t-xl">
                 <div className="flex items-center gap-2">
                   <button onClick={onClose} className="lg:hidden flex items-center gap-1 text-sky-600 text-xs font-semibold px-2 py-1 rounded hover:bg-sky-100"><Icon name="arrow-left" size={14} /> Back</button>
-                  <span className="font-bold text-sm">{selected.license_number || selected.reservation_number || selected.request_number || `#${selected.id}`}</span>
+                  <span className="font-bold text-sm">{selected.license_number || selected.reservation_number || selected.request_number || selected.submission_number || `#${selected.id}`}</span>
                   <StatusBadge status={selected.status} />
                 </div>
                 <button onClick={onClose} className="hidden lg:flex text-gray-400 hover:text-gray-600 w-7 h-7 rounded items-center justify-center hover:bg-gray-200"><Icon name="x" size={16} /></button>
@@ -726,14 +761,26 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
 
           {/* ===== BUSINESS LICENSES ===== */}
           {activeTab === 'licenses' && (
-            <ModulePanel items={licenses} selected={selectedLicense} onSelect={l => loadModuleDetail('license',l)} onClose={() => { setSelectedLicense(null); setLicenseDetail(null); }} loading={moduleLoading && activeTab === 'licenses'} onExport={exportLicensesCSV}
-              filterFn={(item, q) => (item.business_name||'').toLowerCase().includes(q) || (item.license_number||'').toLowerCase().includes(q)}
+            <ModulePanel
+              items={licenses.filter(l => (licenseTypeFilter === 'all' || l.type_code === licenseTypeFilter) && (licenseStatusFilter === 'all' || l.status === licenseStatusFilter))}
+              selected={selectedLicense} onSelect={l => loadModuleDetail('license',l)} onClose={() => { setSelectedLicense(null); setLicenseDetail(null); }} loading={moduleLoading && activeTab === 'licenses'} onExport={exportLicensesCSV}
+              filterFn={(item, q) => (item.business_name||'').toLowerCase().includes(q) || (item.license_number||'').toLowerCase().includes(q) || (item.owner_name||'').toLowerCase().includes(q) || (item.address||'').toLowerCase().includes(q)}
+              extraFilters={[
+                { label: 'All Types', value: licenseTypeFilter, onChange: setLicenseTypeFilter, options: [...new Map(licenses.map(l => [l.type_code, l.type_name])).entries()].sort(([,a],[,b])=>(a||'').localeCompare(b||'')).map(([code, name]) => ({ value: code, label: name || code })) },
+                { label: 'All Statuses', value: licenseStatusFilter, onChange: setLicenseStatusFilter, options: [{value:'pending',label:'Pending'},{value:'active',label:'Active'},{value:'expired',label:'Expired'},{value:'suspended',label:'Suspended'},{value:'denied',label:'Denied'}] },
+              ]}
               columns={[
-                { key:'license_number', label:'License #', render: l => <div><div className="font-semibold text-sm text-sky-700">{l.license_number||`#${l.id}`}</div><div className="text-[10px] text-gray-400">{l.license_type||l.type}</div></div> },
-                { key:'business_name', label:'Business', hideMobile:true },
-                { key:'type', label:'Type', hideMobile:true, render: l => <span className="text-gray-600">{l.license_type||l.type}</span> },
-                { key:'status', label:'Status', render: l => <StatusBadge status={l.status} /> },
-                { key:'expires_at', label:'Expires', render: l => <span className="text-xs text-gray-500">{l.expires_at?.split('T')[0]||l.expiration_date?.split('T')[0]||'--'}</span> },
+                { key:'license_number', label:'License #', sortable:true, render: l => <div><div className="font-semibold text-sky-700">{l.license_number||`#${l.id}`}</div>{l.dba_name&&<div className="text-[10px] text-gray-400">DBA: {l.dba_name}</div>}</div> },
+                { key:'business_name', label:'Business', sortable:true, render: l => <span className="font-medium text-gray-900">{l.business_name}</span> },
+                { key:'owner_name', label:'Owner', hideMobile:true, sortable:true, render: l => l.owner_name || '--' },
+                { key:'type_name', label:'Type', hideMobile:true, sortable:true, render: l => <span className="text-gray-600">{l.type_name||'--'}</span> },
+                { key:'address', label:'Address', hideMobile:true, sortable:true, render: l => <span className="text-gray-600">{l.address||'--'}</span> },
+                { key:'employee_count', label:'Emp', hideMobile:true, sortable:true, sortVal: l => l.employee_count||0, render: l => l.employee_count??'--' },
+                { key:'issued_date', label:'Issued', sortable:true, render: l => <span className="text-gray-500">{l.issued_date?.split('T')[0]||'--'}</span> },
+                { key:'expiration_date', label:'Expires', sortable:true, render: l => { const exp=l.expiration_date?.split('T')[0]; const near=exp&&new Date(exp)<new Date(Date.now()+90*86400000)&&l.status==='active'; return <span className={near?'text-amber-600 font-semibold':'text-gray-500'}>{exp||'--'}</span>; } },
+                { key:'annual_fee', label:'Fee', sortable:true, sortVal: l=>l.annual_fee||0, render: l => l.annual_fee?`$${l.annual_fee}`:'--' },
+                { key:'fees_paid', label:'Paid', sortable:true, sortVal: l=>l.fees_paid||0, render: l => { const due=l.annual_fee||0,paid=l.fees_paid||0; return <span className={paid>=due&&due>0?'text-emerald-600 font-semibold':paid>0?'text-amber-600':due>0?'text-red-500':'text-gray-400'}>{paid?`$${paid}`:'--'}</span>; } },
+                { key:'status', label:'Status', sortable:true, render: l => <StatusBadge status={l.status} /> },
               ]}
               renderDetail={(lic) => (
                 <div className="space-y-3">
@@ -774,14 +821,25 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
 
           {/* ===== PARK RESERVATIONS ===== */}
           {activeTab === 'parks' && (
-            <ModulePanel items={reservations} selected={selectedReservation} onSelect={r => loadModuleDetail('reservation',r)} onClose={() => { setSelectedReservation(null); setReservationDetail(null); }} loading={moduleLoading && activeTab === 'parks'} onExport={exportParksCSV}
-              filterFn={(item, q) => (item.event_name||'').toLowerCase().includes(q) || (item.facility_name||'').toLowerCase().includes(q) || (item.reservation_number||'').toLowerCase().includes(q)}
+            <ModulePanel
+              items={reservations.filter(r => (parkFacilityFilter === 'all' || r.facility_name === parkFacilityFilter) && (parkStatusFilter === 'all' || r.status === parkStatusFilter))}
+              selected={selectedReservation} onSelect={r => loadModuleDetail('reservation',r)} onClose={() => { setSelectedReservation(null); setReservationDetail(null); }} loading={moduleLoading && activeTab === 'parks'} onExport={exportParksCSV}
+              filterFn={(item, q) => (item.event_name||'').toLowerCase().includes(q) || (item.facility_name||'').toLowerCase().includes(q) || (item.reservation_number||'').toLowerCase().includes(q) || (item.contact_name||'').toLowerCase().includes(q)}
+              extraFilters={[
+                { label: 'All Facilities', value: parkFacilityFilter, onChange: setParkFacilityFilter, options: [...new Set(reservations.map(r=>r.facility_name))].filter(Boolean).sort().map(f=>({value:f,label:f})) },
+                { label: 'All Statuses', value: parkStatusFilter, onChange: setParkStatusFilter, options: [{value:'pending',label:'Pending'},{value:'approved',label:'Approved'},{value:'denied',label:'Denied'},{value:'cancelled',label:'Cancelled'}] },
+              ]}
               columns={[
-                { key:'reservation_number', label:'Res #', render: r => <div className="font-semibold text-sm text-sky-700">{r.reservation_number||`#${r.id}`}</div> },
-                { key:'event_name', label:'Event', hideMobile:true, render: r => <span>{r.event_name||r.title||'--'}</span> },
-                { key:'facility_name', label:'Facility', hideMobile:true, render: r => <span className="text-gray-600">{r.facility_name||'--'}</span> },
-                { key:'event_date', label:'Date', render: r => <span className="text-xs text-gray-500">{r.event_date?.split('T')[0]||'--'}</span> },
-                { key:'status', label:'Status', render: r => <StatusBadge status={r.status} /> },
+                { key:'reservation_number', label:'Res #', sortable:true, render: r => <div className="font-semibold text-sky-700">{r.reservation_number||`#${r.id}`}</div> },
+                { key:'event_name', label:'Event', sortable:true, render: r => <span className="font-medium text-gray-900">{r.event_name||'--'}</span> },
+                { key:'facility_name', label:'Facility', hideMobile:true, sortable:true, render: r => <span className="text-gray-600">{r.facility_name||'--'}</span> },
+                { key:'event_date', label:'Date', sortable:true, render: r => <span className="text-gray-600">{r.event_date?.split('T')[0]||'--'}</span> },
+                { key:'start_time', label:'Time', hideMobile:true, render: r => r.start_time?`${r.start_time}–${r.end_time||'?'}`:'--' },
+                { key:'contact_name', label:'Contact', hideMobile:true, sortable:true, render: r => r.contact_name||'--' },
+                { key:'attendee_count', label:'Guests', hideMobile:true, sortable:true, sortVal: r=>r.attendee_count||0, render: r => r.attendee_count??'--' },
+                { key:'total_fee', label:'Fee', sortable:true, sortVal: r=>r.total_fee||0, render: r => r.total_fee?`$${r.total_fee}`:'--' },
+                { key:'fees_paid', label:'Paid', sortable:true, sortVal: r=>r.fees_paid||0, render: r => { const due=r.total_fee||0,paid=r.fees_paid||0; return <span className={paid>=due&&due>0?'text-emerald-600 font-semibold':paid>0?'text-amber-600':due>0?'text-red-500':'text-gray-400'}>{paid?`$${paid}`:'--'}</span>; } },
+                { key:'status', label:'Status', sortable:true, render: r => <StatusBadge status={r.status} /> },
               ]}
               renderDetail={(res) => (
                 <div className="space-y-3">
@@ -808,14 +866,24 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
 
           {/* ===== CITIZEN REQUESTS ===== */}
           {activeTab === 'requests' && (
-            <ModulePanel items={requests} selected={selectedRequest} onSelect={r => loadModuleDetail('request',r)} onClose={() => { setSelectedRequest(null); setRequestDetail(null); }} loading={moduleLoading && activeTab === 'requests'} onExport={exportRequestsCSV}
-              filterFn={(item, q) => (item.category||'').toLowerCase().includes(q) || (item.location||'').toLowerCase().includes(q) || (item.request_number||'').toLowerCase().includes(q) || (item.description||'').toLowerCase().includes(q)}
+            <ModulePanel
+              items={requests.filter(r => (requestCategoryFilter === 'all' || r.category_code === requestCategoryFilter) && (requestStatusFilter === 'all' || r.status === requestStatusFilter))}
+              selected={selectedRequest} onSelect={r => loadModuleDetail('request',r)} onClose={() => { setSelectedRequest(null); setRequestDetail(null); }} loading={moduleLoading && activeTab === 'requests'} onExport={exportRequestsCSV}
+              filterFn={(item, q) => (item.category_name||item.category||'').toLowerCase().includes(q) || (item.address||item.location||'').toLowerCase().includes(q) || (item.request_number||'').toLowerCase().includes(q) || (item.description||'').toLowerCase().includes(q) || (item.reporter_name||'').toLowerCase().includes(q)}
+              extraFilters={[
+                { label: 'All Categories', value: requestCategoryFilter, onChange: setRequestCategoryFilter, options: [...new Map(requests.map(r=>[r.category_code||r.category, r.category_name||r.category])).entries()].filter(([k])=>k).sort(([,a],[,b])=>(a||'').localeCompare(b||'')).map(([code,name])=>({value:code,label:name||code})) },
+                { label: 'All Statuses', value: requestStatusFilter, onChange: setRequestStatusFilter, options: [{value:'submitted',label:'Submitted'},{value:'in_progress',label:'In Progress'},{value:'resolved',label:'Resolved'},{value:'cancelled',label:'Cancelled'}] },
+              ]}
               columns={[
-                { key:'request_number', label:'Request #', render: r => <div className="font-semibold text-sm text-sky-700">{r.request_number||`#${r.id}`}</div> },
-                { key:'category', label:'Category', hideMobile:true },
-                { key:'location', label:'Location', hideMobile:true, render: r => <span className="text-gray-600 truncate max-w-[150px] block">{r.location||'--'}</span> },
-                { key:'status', label:'Status', render: r => <StatusBadge status={r.status} /> },
-                { key:'priority', label:'Priority', render: r => <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${r.priority==='high'||r.priority==='urgent'?'bg-red-100 text-red-700':r.priority==='medium'?'bg-amber-100 text-amber-700':'bg-gray-100 text-gray-700'}`}>{r.priority||'normal'}</span> },
+                { key:'request_number', label:'Request #', sortable:true, render: r => <div className="font-semibold text-sky-700">{r.request_number||`#${r.id}`}</div> },
+                { key:'category_name', label:'Category', sortable:true, render: r => r.category_name||r.category||'--' },
+                { key:'department', label:'Dept', hideMobile:true, sortable:true, render: r => <span className="text-gray-500 text-[11px]">{r.department||'--'}</span> },
+                { key:'address', label:'Address', hideMobile:true, sortable:true, render: r => <span className="text-gray-600 truncate max-w-[180px] block">{r.address||r.location||'--'}</span> },
+                { key:'reporter_name', label:'Reporter', hideMobile:true, sortable:true, render: r => r.reporter_name||'Anonymous' },
+                { key:'created_at', label:'Submitted', sortable:true, render: r => <span className="text-gray-500">{r.created_at?.split('T')[0]||'--'}</span> },
+                { key:'priority', label:'Priority', sortable:true, render: r => <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${r.priority==='high'?'bg-red-100 text-red-700':r.priority==='normal'?'bg-amber-100 text-amber-700':'bg-gray-100 text-gray-600'}`}>{r.priority||'normal'}</span> },
+                { key:'status', label:'Status', sortable:true, render: r => <StatusBadge status={r.status} /> },
+                { key:'assigned_first', label:'Assigned', hideMobile:true, sortable:true, render: r => r.assigned_first?`${r.assigned_first} ${r.assigned_last||''}`:'--' },
               ]}
               renderDetail={(req) => (
                 <div className="space-y-3">
@@ -853,13 +921,23 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
 
           {/* ===== FORM SUBMISSIONS ===== */}
           {activeTab === 'forms' && (
-            <ModulePanel items={formSubmissions} selected={selectedForm} onSelect={f => { setSelectedForm(f); setModuleComment(''); }} onClose={() => setSelectedForm(null)} loading={moduleLoading && activeTab === 'forms'} onExport={exportFormsCSV}
+            <ModulePanel
+              items={formSubmissions.filter(f => (formTypeFilter === 'all' || f.form_type === formTypeFilter) && (formStatusFilter === 'all' || f.status === formStatusFilter))}
+              selected={selectedForm} onSelect={f => { setSelectedForm(f); setModuleComment(''); }} onClose={() => setSelectedForm(null)} loading={moduleLoading && activeTab === 'forms'} onExport={exportFormsCSV}
               filterFn={(item, q) => (item.form_name||'').toLowerCase().includes(q) || (item.submission_number||'').toLowerCase().includes(q) || JSON.stringify(item.data||{}).toLowerCase().includes(q)}
+              extraFilters={[
+                { label: 'All Types', value: formTypeFilter, onChange: setFormTypeFilter, options: [...new Set(formSubmissions.map(f=>f.form_type))].filter(Boolean).sort().map(t=>({value:t,label:t==='DOG'?'Dog Permit':t==='CHK'?'Chicken Permit':t==='BRD'?'Board Application':t==='SEC'?'Security Check':t==='PRR'?'Public Records':t==='TRF'?'Traffic/Sign':t==='EMP'?'Employment':t})) },
+                { label: 'All Statuses', value: formStatusFilter, onChange: setFormStatusFilter, options: [{value:'received',label:'Received'},{value:'reviewed',label:'Reviewed'},{value:'approved',label:'Approved'},{value:'denied',label:'Denied'}] },
+              ]}
               columns={[
-                { key:'submission_number', label:'Tracking #', render: r => <div className="font-semibold text-sm text-sky-700">{r.submission_number}</div> },
-                { key:'form_name', label:'Form Type', render: r => <span className="text-gray-700 truncate max-w-[200px] block">{r.form_name||r.form_type}</span> },
-                { key:'submitted_at', label:'Submitted', render: r => <span className="text-xs text-gray-500">{r.submitted_at?.split('T')[0]||'--'}</span> },
-                { key:'status', label:'Status', render: r => <StatusBadge status={r.status} /> },
+                { key:'submission_number', label:'Tracking #', sortable:true, render: f => <div className="font-semibold text-sky-700">{f.submission_number}</div> },
+                { key:'form_type', label:'Type', sortable:true, render: f => { const labels={DOG:'🐕 Dog',CHK:'🐔 Chicken',BRD:'📋 Board',SEC:'🔒 Security',PRR:'📄 Records',TRF:'🚦 Traffic',EMP:'👤 Employment'}; return <span className="font-medium text-gray-700">{labels[f.form_type]||f.form_type}</span>; } },
+                { key:'form_name', label:'Form', hideMobile:true, sortable:true, render: f => <span className="text-gray-600 truncate max-w-[180px] block">{f.form_name||f.form_type}</span> },
+                { key:'submitter', label:'Name', hideMobile:true, sortable:true, sortVal: f => { try { const d=typeof f.data==='string'?JSON.parse(f.data):f.data||{}; return d.owner_name||d.applicant_name||d.name||''; } catch { return ''; } }, render: f => { try { const d=typeof f.data==='string'?JSON.parse(f.data):f.data||{}; return d.owner_name||d.applicant_name||d.name||'--'; } catch { return '--'; } } },
+                { key:'address', label:'Address', hideMobile:true, sortable:true, sortVal: f => { try { const d=typeof f.data==='string'?JSON.parse(f.data):f.data||{}; return d.address||''; } catch { return ''; } }, render: f => { try { const d=typeof f.data==='string'?JSON.parse(f.data):f.data||{}; return <span className="text-gray-600 truncate max-w-[160px] block">{d.address||'--'}</span>; } catch { return '--'; } } },
+                { key:'submitted_at', label:'Submitted', sortable:true, render: f => <span className="text-gray-500">{f.submitted_at?.split('T')[0]||'--'}</span> },
+                { key:'reviewed_at', label:'Reviewed', hideMobile:true, sortable:true, render: f => <span className="text-gray-500">{f.reviewed_at?.split('T')[0]||'--'}</span> },
+                { key:'status', label:'Status', sortable:true, render: f => <StatusBadge status={f.status} /> },
               ]}
               renderDetail={(form) => {
                 const d = typeof form.data === 'string' ? JSON.parse(form.data || '{}') : (form.data || {});
