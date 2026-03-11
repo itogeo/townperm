@@ -261,11 +261,14 @@ export async function ensureDB(db) {
   for (const sql of extraCols) { try { await db.exec(sql); } catch {} }
   // Ensure rate_limits table exists
   try { await db.exec("CREATE TABLE IF NOT EXISTS rate_limits (ip TEXT NOT NULL, endpoint TEXT NOT NULL, window_start TEXT NOT NULL, request_count INTEGER DEFAULT 1, PRIMARY KEY (ip, endpoint, window_start))"); } catch {}
-  // Re-apply seed data if new records are missing (INSERT OR IGNORE is idempotent)
+  // Re-apply seed data if new records are missing — run each statement individually for reliability
   const hasNewData = await db.prepare("SELECT 1 FROM permits WHERE permit_number = 'ZP-R-2026-002'").first();
   if (!hasNewData) {
-    const seedFlat = SEED_SQL.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-    try { await db.exec(seedFlat); } catch {}
+    // Split on semicolons and run each INSERT statement separately so one failure doesn't abort the rest
+    const stmts = SEED_SQL.split(/;\s*\n/).map(s => s.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()).filter(s => s.toLowerCase().startsWith('insert'));
+    for (const stmt of stmts) {
+      try { await db.exec(stmt + ';'); } catch {}
+    }
   }
   // Seed new permit types
   const newTypes = [

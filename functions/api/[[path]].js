@@ -448,6 +448,20 @@ export async function onRequest(context) {
       return json(emails.results);
     }
 
+    // ==================================================================
+    // DEBUG — public DB counts (remove after testing)
+    // ==================================================================
+    if (method === 'GET' && path === '/debug/counts') {
+      const [p, l, r, f, cr] = await Promise.all([
+        db.prepare('SELECT COUNT(*) as c FROM permits').first(),
+        db.prepare('SELECT COUNT(*) as c FROM business_licenses').first(),
+        db.prepare('SELECT COUNT(*) as c FROM park_reservations').first(),
+        db.prepare('SELECT COUNT(*) as c FROM form_submissions').first(),
+        db.prepare('SELECT COUNT(*) as c FROM citizen_requests').first(),
+      ]);
+      return json({ permits: p.c, licenses: l.c, reservations: r.c, form_submissions: f.c, citizen_requests: cr.c });
+    }
+
     // 404
     return json({ error: 'Not found', path }, 404);
 
