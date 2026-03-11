@@ -45,10 +45,7 @@ const App = () => {
     if (serverOnline) { try { await api.logout(); } catch {} }
     setUser(null); setDemoMode(false); setView('public');
   };
-  const handleStaffLogin = () => {
-    if (serverOnline) setShowLogin(true);
-    else { setDemoMode(true); setView('staff'); }
-  };
+  const handleStaffLogin = () => { setShowLogin(true); };
 
   if (loading) {
     return (

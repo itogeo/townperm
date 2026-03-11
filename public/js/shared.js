@@ -196,7 +196,7 @@ const StatusBadge = ({ status }) => {
 };
 
 const LoginModal = ({ onLogin, onCancel, onDemoMode }) => {
-  const [email, setEmail] = useState('ksmith@threeforksmt.gov');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
