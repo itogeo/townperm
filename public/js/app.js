@@ -21,7 +21,9 @@ const App = () => {
       setConfig(normalizeConfig(cfg));
 
       const [permitsData, parcelsData, statsData, typesData] = await Promise.all([
-        api.getPermits(), api.getParcels(), api.getStats(), api.getPermitTypes(),
+        api.getPermits(), api.getParcels(),
+        api.getStats().catch(() => null),
+        api.getPermitTypes(),
       ]);
 
       if (permitsData) setPermits(permitsData.map(transformPermit));
@@ -40,7 +42,7 @@ const App = () => {
   useEffect(() => { loadData(); }, [loadData]);
   useEffect(() => { document.title = `Town of ${config.cityName} — City Services`; }, [config.cityName]);
 
-  const handleLogin = (userData) => { setUser(userData); setShowLogin(false); setView('staff'); };
+  const handleLogin = (userData) => { setUser(userData); setShowLogin(false); setView('staff'); api.getStats().then(setStats).catch(() => {}); };
   const handleLogout = async () => {
     if (serverOnline) { try { await api.logout(); } catch {} }
     setUser(null); setDemoMode(false); setView('public');
