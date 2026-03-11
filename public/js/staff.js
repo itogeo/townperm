@@ -42,6 +42,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
   const [moduleLoading, setModuleLoading] = useState(false);
   const [formSubmissions, setFormSubmissions] = useState([]);
   const [selectedForm, setSelectedForm] = useState(null);
+  const [civicItems, setCivicItems] = useState([]);
   const toast = useToast();
 
   const pendingCount = permits.filter(p => p.status === 'pending' || p.status === 'under_review').length;
@@ -63,7 +64,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
   ];
 
   useEffect(() => { if (demoMode) return; if (activeTab === 'licenses' && !licenses.length) { setModuleLoading(true); api.getLicenses().then(setLicenses).catch(() => toast('Failed to load licenses', 'error')).finally(() => setModuleLoading(false)); } if (activeTab === 'parks' && !reservations.length) { setModuleLoading(true); api.getReservations().then(setReservations).catch(() => toast('Failed to load reservations', 'error')).finally(() => setModuleLoading(false)); } if (activeTab === 'requests' && !requests.length) { setModuleLoading(true); api.getRequests().then(setRequests).catch(() => toast('Failed to load requests', 'error')).finally(() => setModuleLoading(false)); } if (activeTab === 'forms' && !formSubmissions.length) { setModuleLoading(true); api.getForms().then(setFormSubmissions).catch(() => toast('Failed to load form submissions', 'error')).finally(() => setModuleLoading(false)); } }, [activeTab, demoMode]);
-  useEffect(() => { if (demoMode) return; const ce = e => toast(e.message||'Load error','error'); api.getLicenses().then(setLicenses).catch(ce); api.getReservations().then(setReservations).catch(ce); api.getRequests().then(setRequests).catch(ce); api.getForms().then(setFormSubmissions).catch(ce); api.getCalendar().then(setCalendarEvents).catch(ce); api.getActivity(30).then(setActivityFeed).catch(ce); }, [demoMode]);
+  useEffect(() => { if (demoMode) return; const ce = e => toast(e.message||'Load error','error'); api.getLicenses().then(setLicenses).catch(ce); api.getReservations().then(setReservations).catch(ce); api.getRequests().then(setRequests).catch(ce); api.getForms().then(setFormSubmissions).catch(ce); api.getFormsMap().then(setCivicItems).catch(ce); api.getCalendar().then(setCalendarEvents).catch(ce); api.getActivity(30).then(setActivityFeed).catch(ce); }, [demoMode]);
 
   const notifications = useMemo(() => { const items = [], today = new Date().toISOString().split('T')[0];
     calendarEvents.filter(e => e.date < today && e.status !== 'completed' && e.type !== 'inspection').forEach(e => items.push({ type:'overdue', icon:'alert-triangle', color:'red', title:`Overdue: ${e.title}`, sub:`Due ${e.date}`, id:`dl-${e.id}` }));
@@ -434,7 +435,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
                 </div>
                 <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
                   <div className="p-4 border-b"><h3 className="font-bold text-sm flex items-center gap-2"><Icon name="map-pin" size={15} className="text-violet-600" /> Active Permits Map</h3></div>
-                  <div style={{height:'264px'}}><PermitMap permits={permits} parcels={parcels} onPermitClick={p => { setActiveTab('permits'); loadDetail(p); }} config={config} /></div>
+                  <div style={{height:'264px'}}><PermitMap permits={permits} parcels={parcels} civicItems={civicItems} onPermitClick={p => { setActiveTab('permits'); loadDetail(p); }} config={config} /></div>
                 </div>
               </div>
             </div>
@@ -925,7 +926,7 @@ const StaffDashboard = ({ config, permits, parcels, stats, permitTypes, user, de
           {/* ===== MAP ===== */}
           {activeTab === 'map' && (
             <div className="bg-white rounded-xl shadow-sm border overflow-hidden" style={{height:'calc(100vh - 160px)'}}>
-              <PermitMap permits={permits} parcels={parcels} selectedPermit={selectedPermit} onPermitClick={p => { setActiveTab('permits'); loadDetail(p); }} config={config} showInfrastructure={true} />
+              <PermitMap permits={permits} parcels={parcels} civicItems={civicItems} selectedPermit={selectedPermit} onPermitClick={p => { setActiveTab('permits'); loadDetail(p); }} config={config} showInfrastructure={true} />
             </div>
           )}
 

@@ -110,6 +110,7 @@ const api = {
   submitForm: (data) => api.request('/api/forms', { method: 'POST', body: JSON.stringify(data) }),
   getForms: (params = {}) => { const qs = new URLSearchParams(params).toString(); return api.request(`/api/forms${qs ? '?' + qs : ''}`); },
   updateForm: (id, data) => api.request(`/api/forms/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getFormsMap: () => api.request('/api/forms/map'),
 };
 
 // Hash-based SPA routing

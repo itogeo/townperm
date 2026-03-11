@@ -29,13 +29,18 @@ const PERMIT_STATUSES = [
   { id: 'completed', label: 'Completed', color: '#059669' },
 ];
 
-const PermitMap = ({ permits, parcels, selectedPermit, onPermitClick, onParcelClick, config, className = 'h-full', showControls = true, showInfrastructure = false }) => {
+const CIVIC_LAYERS = [
+  { id: 'dogs', label: 'Dog Permits', desc: 'Registered dogs by address', color: '#8b5cf6', group: 'Civic' },
+  { id: 'chickens', label: 'Chicken Permits', desc: 'Licensed backyard chickens', color: '#f59e0b', group: 'Civic' },
+];
+
+const PermitMap = ({ permits, parcels, civicItems = [], selectedPermit, onPermitClick, onParcelClick, config, className = 'h-full', showControls = true, showInfrastructure = false }) => {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const popup = useRef(null);
   const [loaded, setLoaded] = useState(false);
   const [mapStyle, setMapStyle] = useState('streets');
-  const [layers, setLayers] = useState({ zoning: false, cadastral: false, floodplain: false, hydrants: false, water: false, wastewater: false, subdivisions: false, fire_districts: false });
+  const [layers, setLayers] = useState({ zoning: false, cadastral: false, floodplain: false, hydrants: false, water: false, wastewater: false, subdivisions: false, fire_districts: false, dogs: false, chickens: false });
   const [statusFilters, setStatusFilters] = useState({ pending: true, under_review: true, approved: true, denied: true, completed: true });
   const [showLayerPanel, setShowLayerPanel] = useState(false);
   const permitsRef = useRef(permits);
@@ -46,6 +51,9 @@ const PermitMap = ({ permits, parcels, selectedPermit, onPermitClick, onParcelCl
   onPermitClickRef.current = onPermitClick;
   onParcelClickRef.current = onParcelClick;
   layersRef.current = layers;
+
+  const dogGeoJSON = useMemo(() => ({ type: 'FeatureCollection', features: civicItems.filter(c => c.type === 'DOG').map(c => ({ type: 'Feature', properties: { id: c.id, address: c.address, owner: c.owner, extra: c.extra, status: c.status }, geometry: { type: 'Point', coordinates: [c.longitude, c.latitude] } })) }), [civicItems]);
+  const chickenGeoJSON = useMemo(() => ({ type: 'FeatureCollection', features: civicItems.filter(c => c.type === 'CHK').map(c => ({ type: 'Feature', properties: { id: c.id, address: c.address, owner: c.owner, extra: c.extra, status: c.status }, geometry: { type: 'Point', coordinates: [c.longitude, c.latitude] } })) }), [civicItems]);
 
   const permitGeoJSON = useMemo(() => ({
     type: 'FeatureCollection',
@@ -127,6 +135,22 @@ const PermitMap = ({ permits, parcels, selectedPermit, onPermitClick, onParcelCl
     }
   }, [parcels]);
 
+  const addCivicLayer = useCallback((sourceId, geoData, color) => {
+    if (map.current.getSource(sourceId)) { map.current.getSource(sourceId).setData(geoData); return; }
+    map.current.addSource(sourceId, { type: 'geojson', data: geoData });
+    map.current.addLayer({ id: `${sourceId}-glow`, type: 'circle', source: sourceId, paint: { 'circle-radius': 16, 'circle-color': color, 'circle-opacity': 0.18 } });
+    map.current.addLayer({ id: `${sourceId}-markers`, type: 'circle', source: sourceId, paint: { 'circle-radius': 8, 'circle-color': color, 'circle-stroke-width': 2.5, 'circle-stroke-color': '#ffffff' } });
+    map.current.on('mouseenter', `${sourceId}-markers`, (e) => {
+      map.current.getCanvas().style.cursor = 'pointer';
+      const f = e.features[0].properties;
+      popup.current = new mapboxgl.Popup({ closeButton: false, offset: 14 })
+        .setLngLat(e.features[0].geometry.coordinates)
+        .setHTML(`<div style="padding:10px 14px;min-width:180px"><div style="font-weight:700;font-size:13px;margin-bottom:3px">${f.owner}</div><div style="font-size:12px;color:#555;margin-bottom:4px">${f.address}</div><div style="font-size:11px;color:${color};font-weight:600">${f.extra}</div></div>`)
+        .addTo(map.current);
+    });
+    map.current.on('mouseleave', `${sourceId}-markers`, () => { map.current.getCanvas().style.cursor = ''; if (popup.current) { popup.current.remove(); popup.current = null; } });
+  }, []);
+
   const addPermitLayers = useCallback(() => {
     if (!map.current.getSource('permits')) {
       map.current.addSource('permits', { type: 'geojson', data: permitGeoJSON });
@@ -178,11 +202,22 @@ const PermitMap = ({ permits, parcels, selectedPermit, onPermitClick, onParcelCl
     if (layers.wastewater) { loadPointFeatures('wastewater', WASTEWATER_URL, '#8b5cf6', 'S'); }
     else if (map.current.getLayer('wastewater-markers')) { map.current.removeLayer('wastewater-markers'); map.current.removeSource('wastewater'); }
   }, [loaded, layers.wastewater]);
+  useEffect(() => {
+    if (!loaded || !map.current) return;
+    if (layers.dogs) { addCivicLayer('civic-dogs', dogGeoJSON, '#8b5cf6'); ['glow','markers'].forEach(s => { if (map.current.getLayer(`civic-dogs-${s}`)) map.current.setLayoutProperty(`civic-dogs-${s}`, 'visibility', 'visible'); }); }
+    else { ['glow','markers'].forEach(s => { if (map.current.getLayer(`civic-dogs-${s}`)) map.current.setLayoutProperty(`civic-dogs-${s}`, 'visibility', 'none'); }); }
+  }, [loaded, layers.dogs, dogGeoJSON]);
+  useEffect(() => {
+    if (!loaded || !map.current) return;
+    if (layers.chickens) { addCivicLayer('civic-chickens', chickenGeoJSON, '#f59e0b'); ['glow','markers'].forEach(s => { if (map.current.getLayer(`civic-chickens-${s}`)) map.current.setLayoutProperty(`civic-chickens-${s}`, 'visibility', 'visible'); }); }
+    else { ['glow','markers'].forEach(s => { if (map.current.getLayer(`civic-chickens-${s}`)) map.current.setLayoutProperty(`civic-chickens-${s}`, 'visibility', 'none'); }); }
+  }, [loaded, layers.chickens, chickenGeoJSON]);
 
   const toggleLayer = (id) => setLayers(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleStatus = (id) => setStatusFilters(prev => ({ ...prev, [id]: !prev[id] }));
   const activeLayerCount = Object.values(layers).filter(Boolean).length;
-  const groups = [...new Set(INFRA_LAYERS.map(l => l.group))];
+  const allLayers = [...INFRA_LAYERS, ...CIVIC_LAYERS];
+  const groups = [...new Set(allLayers.map(l => l.group))];
 
   return (
     <div className={`relative ${className}`}>
@@ -217,7 +252,7 @@ const PermitMap = ({ permits, parcels, selectedPermit, onPermitClick, onParcelCl
                   <div key={g} className="mb-3">
                     <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-1.5 px-1">{g}</p>
                     <div className="space-y-0.5">
-                      {INFRA_LAYERS.filter(l => l.group === g).map(l => (
+                      {allLayers.filter(l => l.group === g).map(l => (
                         <button key={l.id} onClick={() => toggleLayer(l.id)} className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition text-left ${layers[l.id] ? 'bg-sky-50 border border-sky-200' : 'hover:bg-gray-50 border border-transparent'}`}>
                           <div className={`flex-shrink-0 w-7 h-3.5 rounded-full relative transition-colors ${layers[l.id] ? 'bg-sky-500' : 'bg-gray-300'}`}>
                             <div className={`absolute top-0.5 w-2.5 h-2.5 bg-white rounded-full shadow transition-all ${layers[l.id] ? 'left-3.5' : 'left-0.5'}`} />
@@ -264,6 +299,15 @@ const PermitMap = ({ permits, parcels, selectedPermit, onPermitClick, onParcelCl
               {layers.hydrants && <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{backgroundColor:'#ef4444'}} /><span className="text-gray-600">Fire Hydrants</span></div>}
               {layers.water && <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{backgroundColor:'#06b6d4'}} /><span className="text-gray-600">Water Supply</span></div>}
               {layers.wastewater && <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{backgroundColor:'#8b5cf6'}} /><span className="text-gray-600">Wastewater</span></div>}
+            </div>
+          </>
+        )}
+        {(layers.dogs || layers.chickens) && (
+          <>
+            <p className="font-bold text-gray-800 mb-2 mt-3 pt-2 border-t text-[11px] uppercase tracking-wider">Civic Permits</p>
+            <div className="space-y-1">
+              {layers.dogs && <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{backgroundColor:'#8b5cf6'}} /><span className="text-gray-600">Dog Permits</span></div>}
+              {layers.chickens && <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{backgroundColor:'#f59e0b'}} /><span className="text-gray-600">Chicken Permits</span></div>}
             </div>
           </>
         )}

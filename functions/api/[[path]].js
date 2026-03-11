@@ -124,6 +124,16 @@ export async function onRequest(context) {
         await db.prepare('INSERT INTO form_submissions (submission_number, form_type, form_name, data, submitted_at) VALUES (?, ?, ?, ?, datetime("now"))').bind(num, body.form_type, body.form_name || body.form_type, JSON.stringify(body.data)).run();
         return json({ submission_number: num, message: 'Form submitted successfully' }, 201);
       }
+      if (method === 'GET' && path === '/forms/map') {
+        const user = await getUser(request, db);
+        if (!user) return json({ error: 'Unauthorized' }, 401);
+        const q = await db.prepare("SELECT id, submission_number, form_type, form_name, status, submitted_at, data FROM form_submissions WHERE form_type IN ('DOG','CHK') ORDER BY submitted_at DESC").all();
+        const items = q.results.map(r => {
+          const d = JSON.parse(r.data || '{}');
+          return { id: r.id, number: r.submission_number, type: r.form_type, name: r.form_name, status: r.status, submitted: r.submitted_at, address: d.address || '', owner: d.owner_name || d.applicant_name || '', latitude: d.latitude || null, longitude: d.longitude || null, extra: r.form_type === 'DOG' ? `${d.dog_name || ''} — ${d.breed || ''}` : `${d.num_chickens || '?'} chickens` };
+        }).filter(r => r.latitude && r.longitude);
+        return json(items);
+      }
       if (method === 'GET' && path === '/forms') {
         const user = await getUser(request, db);
         if (!user) return json({ error: 'Unauthorized' }, 401);
